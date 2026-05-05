@@ -1,42 +1,53 @@
 #include <Arduino.h>
 #include <M5Unified.h>
-
-#ifndef ENABLE_HW_TESTS
-#define ENABLE_HW_TESTS 0
-#endif
-
-#if ENABLE_HW_TESTS
-void runHx711Test();
-void runRfidTest();
-#endif
+#include <Wire.h>
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-
   M5.begin();
   M5.Display.clear();
-  M5.Display.setTextSize(3);
-  M5.Display.setCursor(10, 10);
-  M5.Display.println("Hello World");
+  M5.Display.setTextSize(2);
+  M5.Display.setTextColor(WHITE, BLACK);
+  Wire.begin(21, 22);  // SDA, SCL dla M5Stack
 
-  Serial.println("Hello World");
+  M5.Display.setCursor(0, 0);
+  M5.Display.println("I2C Scanner start");
+  Serial.println("I2C Scanner start");
 }
 
 void loop() {
-#if ENABLE_HW_TESTS
-  runHx711Test();
-  runRfidTest();
-#else
-  static uint32_t counter = 0;
+  static int cursorY = 24;
+  static bool headerNeedsPrint = true;
+  const int lineHeight = 20;
 
-  Serial.printf("Counter: %lu\n", static_cast<unsigned long>(counter));
+  if (headerNeedsPrint) {
+    M5.Display.setCursor(0, 0);
+    M5.Display.println("I2C scan");
+    headerNeedsPrint = false;
+  }
 
-  M5.Display.fillRect(10, 50, 220, 40, BLACK);
-  M5.Display.setCursor(10, 50);
-  M5.Display.printf("Count: %lu", static_cast<unsigned long>(counter));
+  for (uint8_t address = 0x01; address <= 0x7F; ++address) {
+    Wire.beginTransmission(address);
+    uint8_t result = Wire.endTransmission();
 
-  counter++;
-  delay(1000);
-#endif
+    if (result == 0) {
+      if (cursorY + lineHeight > M5.Display.height()) {
+        M5.Display.clear();
+        cursorY = 24;
+        headerNeedsPrint = true;
+        M5.Display.setCursor(0, 0);
+        M5.Display.println("I2C scan");
+        headerNeedsPrint = false;
+      }
+
+      M5.Display.setCursor(0, cursorY);
+      M5.Display.printf("Found: 0x%02X\n", address);
+      cursorY += lineHeight;
+      Serial.printf("Found device at 0x%02X\n", address);
+    }
+  }
+
+  M5.Display.println("Scan done");
+  Serial.println("Scan done");
+  delay(3000);
 }
