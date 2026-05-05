@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 
+#ifndef ENABLE_HW_TESTS
 #define ENABLE_HW_TESTS 0
+#endif
 
 #if ENABLE_HW_TESTS
 void runHx711Test();
@@ -13,22 +15,28 @@ void setup() {
   delay(1000);
 
   M5.begin();
-  Serial.println("M5Stack Core initialized");
+  M5.Display.clear();
+  M5.Display.setTextSize(3);
+  M5.Display.setCursor(10, 10);
+  M5.Display.println("Hello World");
 
-#if ENABLE_HW_TESTS
-  Serial.println("Hardware test mode enabled");
-#else
-  Serial.println("Hardware test mode disabled");
-#endif
+  Serial.println("Hello World");
 }
 
 void loop() {
 #if ENABLE_HW_TESTS
   runHx711Test();
   runRfidTest();
-  delay(500);
 #else
-  Serial.println("Loop running");
+  static uint32_t counter = 0;
+
+  Serial.printf("Counter: %lu\n", static_cast<unsigned long>(counter));
+
+  M5.Display.fillRect(10, 50, 220, 40, BLACK);
+  M5.Display.setCursor(10, 50);
+  M5.Display.printf("Count: %lu", static_cast<unsigned long>(counter));
+
+  counter++;
   delay(1000);
 #endif
 }

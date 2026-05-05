@@ -3,6 +3,8 @@
 #include <PN532_I2C.h>
 #include <Wire.h>
 
+#if ENABLE_HW_TESTS
+
 namespace {
 constexpr uint8_t kPn532SdaPin = 21;
 constexpr uint8_t kPn532SclPin = 22;
@@ -78,3 +80,5 @@ void runRfidTest() {
   nextPollAtMs = now + kPn532PollIntervalMs;
   delay(20);
 }
+
+#endif

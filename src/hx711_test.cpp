@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <HX711.h>
 
+#if ENABLE_HW_TESTS
+
 namespace {
 constexpr uint8_t kHx711DoutPin = 16;
 constexpr uint8_t kHx711SckPin = 4;
@@ -62,3 +64,5 @@ void runHx711Test() {
 
   delay(20);
 }
+
+#endif
