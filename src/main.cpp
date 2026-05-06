@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Adafruit_PN532.h>
+#include <HX711.h>
 #include <M5Unified.h>
 #include <Wire.h>
 #include <cstring>
@@ -13,6 +14,10 @@ constexpr uint32_t kCardPollIntervalMs = 400;
 constexpr uint32_t kCardGoneTimeoutMs = 1600;
 constexpr uint16_t kReadTimeoutMs = 50;
 constexpr uint8_t kMaxUidLength = 10;
+constexpr uint8_t kHx711DoutPin = 16;
+constexpr uint8_t kHx711SckPin = 4;
+constexpr uint32_t kHx711SampleIntervalMs = 700;
+constexpr uint32_t kHx711InitRetryMs = 1500;
 
 Adafruit_PN532 *pn532 = nullptr;
 uint8_t lastUid[kMaxUidLength] = {};
@@ -20,6 +25,11 @@ uint8_t lastUidLength = 0;
 bool hasLastUid = false;
 uint32_t lastCardSeenAtMs = 0;
 uint32_t nextCardPollAtMs = 0;
+HX711 scale;
+bool scaleInitialized = false;
+bool scaleReady = false;
+uint32_t nextHx711SampleAtMs = 0;
+uint32_t nextHx711InitRetryAtMs = 0;
 
 void showText(const char *line1, const char *line2 = nullptr) {
   M5.Display.clear();
@@ -75,6 +85,11 @@ void printUidToSerial(const uint8_t *uid, uint8_t uidLength) {
   Serial.print("UID: ");
   Serial.println(uidLine);
 }
+
+void printRawWeight(long rawValue) {
+  Serial.print("HX711 raw: ");
+  Serial.println(rawValue);
+}
 }  // namespace
 
 void setup() {
@@ -126,7 +141,7 @@ void setup() {
   nextCardPollAtMs = millis();
 }
 
-void loop() {
+void runRfidTest() {
   if (pn532 == nullptr) {
     delay(1000);
     return;
@@ -164,4 +179,53 @@ void loop() {
   }
 
   delay(10);
+}
+
+void runHx711Test() {
+  if (!scaleInitialized) {
+    scale.begin(kHx711DoutPin, kHx711SckPin);
+    scaleInitialized = true;
+    nextHx711InitRetryAtMs = 0;
+  }
+
+  const uint32_t now = millis();
+
+  if (!scaleReady) {
+    if (now < nextHx711InitRetryAtMs) {
+      delay(10);
+      return;
+    }
+
+    if (scale.is_ready()) {
+      scaleReady = true;
+      nextHx711SampleAtMs = now;
+      Serial.println("HX711 init OK");
+    } else {
+      Serial.println("HX711 not found");
+      nextHx711InitRetryAtMs = now + kHx711InitRetryMs;
+      delay(100);
+    }
+    return;
+  }
+
+  if (now < nextHx711SampleAtMs) {
+    delay(10);
+    return;
+  }
+
+  if (scale.is_ready()) {
+    printRawWeight(scale.read());
+    nextHx711SampleAtMs = now + kHx711SampleIntervalMs;
+  } else {
+    scaleReady = false;
+    nextHx711InitRetryAtMs = now + 250;
+    Serial.println("HX711 not found");
+  }
+
+  delay(20);
+}
+
+void loop() {
+  runRfidTest();
+  runHx711Test();
 }
