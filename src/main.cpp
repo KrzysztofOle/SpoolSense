@@ -62,6 +62,17 @@ void formatUid(const uint8_t *uid, uint8_t uidLength, char *buffer, size_t buffe
   }
 }
 
+const char *classifyTagType(uint8_t uidLength) {
+  switch (uidLength) {
+    case 4:
+      return "Mifare Classic / ISO14443A";
+    case 7:
+      return "NTAG / Ultralight";
+    default:
+      return "Unknown NFC tag";
+  }
+}
+
 bool sameUid(const uint8_t *uid, uint8_t uidLength) {
   return hasLastUid && uidLength == lastUidLength &&
          memcmp(uid, lastUid, uidLength) == 0;
@@ -73,17 +84,24 @@ void storeUid(const uint8_t *uid, uint8_t uidLength) {
   hasLastUid = true;
 }
 
-void showUidOnDisplay(const uint8_t *uid, uint8_t uidLength) {
+void showUidAndTypeOnDisplay(const uint8_t *uid, uint8_t uidLength) {
   char uidLine[48] = {};
   formatUid(uid, uidLength, uidLine, sizeof(uidLine));
-  showText("RFID card detected", uidLine);
+
+  char typeLine[48] = {};
+  snprintf(typeLine, sizeof(typeLine), "Type: %s", classifyTagType(uidLength));
+
+  showText(uidLine, typeLine);
 }
 
-void printUidToSerial(const uint8_t *uid, uint8_t uidLength) {
+void printUidAndTypeToSerial(const uint8_t *uid, uint8_t uidLength) {
   char uidLine[48] = {};
   formatUid(uid, uidLength, uidLine, sizeof(uidLine));
+
   Serial.print("UID: ");
   Serial.println(uidLine);
+  Serial.print("Type: ");
+  Serial.println(classifyTagType(uidLength));
 }
 
 void printRawWeight(long rawValue) {
@@ -174,8 +192,8 @@ void runRfidTest() {
 
   if (!sameUid(uid, uidLength)) {
     storeUid(uid, uidLength);
-    printUidToSerial(uid, uidLength);
-    showUidOnDisplay(uid, uidLength);
+    printUidAndTypeToSerial(uid, uidLength);
+    showUidAndTypeOnDisplay(uid, uidLength);
   }
 
   delay(10);
