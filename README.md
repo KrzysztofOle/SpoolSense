@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T20:15:05+02:00</small>
+<small>Last updated: 2026-05-07T21:46:13+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -41,12 +41,14 @@ This allows:
 ## 🔧 Runtime Model
 
 The firmware now runs as a FreeRTOS task-based runtime instead of a single application loop.
+HX711 can be disabled for a lightweight RFID/UI developer mode.
+Set `CONFIG_SPOOLSENSE_ENABLE_HX711=n` to keep the runtime on RFID, LCD, buttons, and FSM only.
 
 Startup creates separate tasks for:
 
 - central App Task that owns the explicit application state machine
 - RFID / PN532 polling
-- HX711 sampling
+- HX711 sampling when enabled
 - display rendering
 - diagnostics and status logging
 
@@ -56,7 +58,14 @@ The app layer owns lifecycle startup, recovery, and transition logic. Task-to-ta
 - HX711 Task publishes weight updates to the App Task
 - App Task publishes UI state snapshots to the UI Task
 
+The current developer flow also reads the three M5Stack buttons in the App Task:
+
+- BtnA
+- BtnB
+- BtnC
+
 The App Task is the single owner of mutable application state, evaluates FSM transitions, and aggregates sensor data before the UI renders it. `UiState` carries the current `AppMode`, so the display can react to Boot, Idle, TagDetected, Measuring, Error, and Calibration states.
+When HX711 is disabled, the runtime stays in RFID/UI mode and does not treat the missing weight sensor as a fatal fault.
 
 After the ESP-IDF migration, the same task split remains the execution model for the firmware.
 
@@ -85,12 +94,14 @@ After the ESP-IDF migration, the same task split remains the execution model for
 
 Expected messages:
 
+- `HX711 disabled` when the subsystem is turned off in config
 - `HX711 init OK`
 - `HX711 not found`
 - weight readings printed periodically over `Serial`
 - `PN532 init OK`
 - `PN532 not found`
 - RFID UID printed when a tag is presented
+- button clicks logged as `BtnA clicked`, `BtnB clicked`, or `BtnC clicked`
 - for NTAG213 tags, page `0x24` is read without writing to the tag
 - `Serial` shows: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
 - the counter is interpreted as little-endian, and the time conversion is a heuristic for Philips Sonicare brush heads

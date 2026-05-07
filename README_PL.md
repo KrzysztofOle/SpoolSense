@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-07T20:15:05+02:00</small>
+<small>Last updated: 2026-05-07T21:46:13+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -41,12 +41,14 @@ Dzięki temu możliwe jest:
 ## 🔧 Model runtime
 
 Firmware działa teraz jako runtime oparty o taski FreeRTOS zamiast pojedynczej pętli aplikacji.
+HX711 można wyłączyć, aby uruchomić lżejszy tryb developerski RFID/UI.
+Ustaw `CONFIG_SPOOLSENSE_ENABLE_HX711=n`, aby runtime pozostał tylko przy RFID, LCD, przyciskach i FSM.
 
 Start tworzy osobne taski dla:
 
 - centralnego App Task, który posiada jawną maszynę stanów aplikacji
 - odczytu RFID / PN532
-- próbkowania HX711
+- próbkowania HX711, gdy subsystem jest włączony
 - renderowania wyświetlacza
 - diagnostyki i logów stanu
 
@@ -56,7 +58,14 @@ Warstwa `app` odpowiada za lifecycle startupu, recovery i logikę przejść stan
 - HX711 Task publikuje aktualizacje wagi do App Task
 - App Task publikuje snapshoty stanu UI do UI Task
 
+Aktualny tryb developerski odczytuje też trzy przyciski M5Stack w App Task:
+
+- BtnA
+- BtnB
+- BtnC
+
 App Task jest jedynym właścicielem mutowalnego stanu aplikacji, wykonuje logikę FSM i agreguje dane sensorów przed renderowaniem UI. `UiState` przenosi aktualny `AppMode`, więc wyświetlacz może reagować na stany Boot, Idle, TagDetected, Measuring, Error i Calibration.
+Gdy HX711 jest wyłączony, runtime pozostaje w trybie RFID/UI i brak czujnika wagi nie jest traktowany jako błąd krytyczny.
 
 Po migracji do ESP-IDF ten sam podział na taski pozostaje modelem wykonania firmware.
 
@@ -85,12 +94,14 @@ Po migracji do ESP-IDF ten sam podział na taski pozostaje modelem wykonania fir
 
 Oczekiwane komunikaty:
 
+- `HX711 disabled`, gdy podsystem jest wyłączony w konfiguracji
 - `HX711 init OK`
 - `HX711 not found`
 - odczyty wagi wypisywane cyklicznie przez `Serial`
 - `PN532 init OK`
 - `PN532 not found`
 - UID karty RFID wypisywany po zbliżeniu tagu
+- kliknięcia przycisków logowane jako `BtnA clicked`, `BtnB clicked` lub `BtnC clicked`
 - dla tagów NTAG213 odczytywana jest strona `0x24` bez zapisu do taga
 - w `Serial` pojawiają się: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
 - licznik jest interpretowany jako little-endian, a przeliczenie czasu jest heurystyczne dla końcówek Philips Sonicare
