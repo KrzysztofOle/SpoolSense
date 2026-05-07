@@ -1,15 +1,57 @@
+# ESP-IDF / PlatformIO build outputs
+build/
+build*/
+compile_commands.json
+dependencies.lock
+sdkconfig
+sdkconfig.old
+sdkconfig.ci
+sdkconfig.*.old
 .pio/
 
-.vscode/.browse.c_cpp.db*
+# Local ESP-IDF component manager cache, with explicit exceptions for
+# compatibility patches that must remain visible in the workspace.
+managed_components/*
+!managed_components/espressif__arduino-esp32/
+managed_components/espressif__arduino-esp32/*
+!managed_components/espressif__arduino-esp32/cores/
+managed_components/espressif__arduino-esp32/cores/*
+!managed_components/espressif__arduino-esp32/cores/esp32/
+managed_components/espressif__arduino-esp32/cores/esp32/*
+!managed_components/espressif__arduino-esp32/cores/esp32/chip-debug-report.cpp
+!managed_components/m5stack__m5unified/
+managed_components/m5stack__m5unified/*
+!managed_components/m5stack__m5unified/src/
+managed_components/m5stack__m5unified/src/*
+!managed_components/m5stack__m5unified/src/utility/
+managed_components/m5stack__m5unified/src/utility/*
+!managed_components/m5stack__m5unified/src/utility/Mic_Class.cpp
+!managed_components/m5stack__m5unified/src/utility/Power_Class.cpp
+!managed_components/m5stack__m5unified/src/utility/led/
+managed_components/m5stack__m5unified/src/utility/led/*
+!managed_components/m5stack__m5unified/src/utility/led/LED_Strip_Class.cpp
 
-.vscode/c_cpp_properties.json
-
-.vscode/launch.json
-
+# VSCode / IDE caches
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/c_cpp_properties.json
+.vscode/.browse_c_cpp.db*
 .vscode/ipch/
+.idea/
+.cache/
+.clangd/
 
+# ESP-IDF / tool artifacts
 *.bin
-
 *.elf
-
 *.map
+*.hex
+*.lst
+*.suo
+*.user
+*.userosscache
+*.swp
+*.swo

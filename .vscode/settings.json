@@ -1,3 +1,19 @@
 {
-    "idf.currentSetup": "/Users/krzysztof/esp/esp-idf"
+  "idf.espIdfPath": "/Users/krzysztof/esp/esp-idf",
+  "idf.toolsPath": "/Users/krzysztof/.espressif",
+  "idf.buildPath": "${workspaceFolder}/build",
+  "idf.sdkconfigDefaults": [
+    "${workspaceFolder}/sdkconfig.defaults"
+  ],
+  "idf.customExtraVars": {
+    "IDF_PATH": "/Users/krzysztof/esp/esp-idf",
+    "IDF_TOOLS_PATH": "/Users/krzysztof/.espressif",
+    "IDF_TARGET": "esp32",
+    "ESPPORT": "/dev/cu.usbserial-54790111331",
+    "ESPBAUD": "115200"
+  },
+  "idf.openOcdDebugLevel": 0,
+  "idf.saveBeforeBuild": true,
+  "idf.useIDFKconfigStyle": true,
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
 }

@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T19:20:22+02:00</small>
+<small>Last updated: 2026-05-07T20:15:05+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -106,12 +106,37 @@ Expected messages:
 - `components/diagnostics` - logging and formatting helpers
 - `sdkconfig.defaults` - base ESP-IDF configuration
 
-### Building
+## 🧰 VSCode / ESP-IDF Setup
 
-1. Activate the ESP-IDF environment.
-2. Run `idf.py set-target esp32` once for this project.
-3. Run `idf.py build`.
-4. Flash and monitor with `idf.py flash monitor`.
+- Install the `ESP-IDF` extension from Espressif.
+- Install the Microsoft `C/C++` extension for IntelliSense.
+- Optional but useful: `CMake Tools` for CMake integration in VS Code.
+- Open the repository root as the workspace.
+- Activate the ESP-IDF setup at `/Users/krzysztof/esp/esp-idf` before using the terminal.
+- The project is configured for `esp32` and uses `sdkconfig.defaults` as the base configuration.
+- `build/compile_commands.json` is used for code navigation and autocomplete.
+- The VS Code task set in `.vscode/tasks.json` provides `Build`, `Flash`, `Monitor`, `Flash + Monitor`, `Full Clean`, and `Reconfigure`.
+
+## 🔨 Build and Flash
+
+### VS Code tasks
+
+1. `Build` runs `idf.py build`
+2. `Flash` runs `idf.py flash`
+3. `Monitor` runs `idf.py monitor`
+4. `Flash + Monitor` runs `idf.py flash monitor`
+5. `Full Clean` runs `idf.py fullclean`
+6. `Reconfigure` runs `idf.py reconfigure`
+
+### Manual CLI workflow
+
+1. Activate the ESP-IDF environment with `source /Users/krzysztof/esp/esp-idf/export.sh`
+2. Run `idf.py reconfigure` after changing dependencies or target settings
+3. Run `idf.py build`
+4. Run `idf.py flash`
+5. Run `idf.py monitor`
+
+The monitor baud rate is `115200`. If the serial port changes, update the VS Code settings or select the port from the ESP-IDF extension command palette.
 
 ### Troubleshooting
 

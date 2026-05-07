@@ -24,7 +24,7 @@ void Hx711Monitor::begin() {
   scale_.begin(board::kHx711DoutPin, board::kHx711SckPin);
 }
 
-bool Hx711Monitor::is_ready() const {
+bool Hx711Monitor::is_ready() {
   return scale_.is_ready();
 }
 

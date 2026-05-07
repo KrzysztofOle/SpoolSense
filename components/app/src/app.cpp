@@ -307,7 +307,9 @@ void render_state(const UiState &state) {
 
 void App::begin() {
   Serial.begin(115200);
-  M5.begin();
+  auto cfg = M5.config();
+  cfg.fallback_board = m5::board_t::board_M5Stack;
+  M5.begin(cfg);
   board::begin_i2c_mutex();
   display::begin();
 

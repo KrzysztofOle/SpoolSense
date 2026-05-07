@@ -1,0 +1,71 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Flash",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py flash"
+            ],
+            "dependsOn": "Build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Monitor",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py monitor"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash + Monitor",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py flash monitor"
+            ],
+            "dependsOn": "Build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Full Clean",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py fullclean"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Reconfigure",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "source /Users/krzysztof/esp/esp-idf/export.sh >/dev/null && idf.py reconfigure"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}

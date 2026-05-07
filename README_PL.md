@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-07T19:20:22+02:00</small>
+<small>Last updated: 2026-05-07T20:15:05+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -106,12 +106,37 @@ Oczekiwane komunikaty:
 - `components/diagnostics` - logowanie i formatowanie danych
 - `sdkconfig.defaults` - bazowa konfiguracja ESP-IDF
 
-### Budowanie
+## 🧰 VSCode / ESP-IDF Setup
 
-1. Aktywuj środowisko ESP-IDF.
-2. Uruchom `idf.py set-target esp32` raz dla tego projektu.
-3. Uruchom `idf.py build`.
-4. Wgraj i podglądaj logi przez `idf.py flash monitor`.
+- Zainstaluj rozszerzenie `ESP-IDF` od Espressif.
+- Zainstaluj rozszerzenie Microsoft `C/C++` dla IntelliSense.
+- Opcjonalnie doinstaluj `CMake Tools` dla integracji z CMake w VS Code.
+- Otworz katalog glownego workspace projektu.
+- Aktywuj srodowisko ESP-IDF z `/Users/krzysztof/esp/esp-idf` przed uzyciem terminala.
+- Projekt jest skonfigurowany dla `esp32` i korzysta z `sdkconfig.defaults` jako bazy konfiguracji.
+- `build/compile_commands.json` sluzy do nawigacji po kodzie i autocomplete.
+- Taski w `.vscode/tasks.json` udostepniaja: `Build`, `Flash`, `Monitor`, `Flash + Monitor`, `Full Clean` i `Reconfigure`.
+
+## 🔨 Budowanie i flashowanie
+
+### Taski VS Code
+
+1. `Build` uruchamia `idf.py build`
+2. `Flash` uruchamia `idf.py flash`
+3. `Monitor` uruchamia `idf.py monitor`
+4. `Flash + Monitor` uruchamia `idf.py flash monitor`
+5. `Full Clean` uruchamia `idf.py fullclean`
+6. `Reconfigure` uruchamia `idf.py reconfigure`
+
+### Ręczny workflow CLI
+
+1. Aktywuj srodowisko ESP-IDF przez `source /Users/krzysztof/esp/esp-idf/export.sh`
+2. Uruchom `idf.py reconfigure` po zmianie zaleznosci lub targetu
+3. Uruchom `idf.py build`
+4. Uruchom `idf.py flash`
+5. Uruchom `idf.py monitor`
+
+Predkosc monitora to `115200`. Jesli port szeregowy sie zmieni, zaktualizuj ustawienia VS Code albo wybierz port z palety polecen rozszerzenia ESP-IDF.
 
 ### Rozwiązywanie problemów
 

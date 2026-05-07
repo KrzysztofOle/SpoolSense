@@ -23,13 +23,27 @@
 #include "diagnostics/diagnostics.hpp"
 
 namespace display {
+namespace {
+bool display_ready() {
+  return M5.Display.getPanel() != nullptr;
+}
+}  // namespace
+
 void begin() {
+  if (!display_ready()) {
+    return;
+  }
+
   board::I2cLock lock;
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(WHITE, BLACK);
 }
 
 void show_text(const char *line1, const char *line2) {
+  if (!display_ready()) {
+    return;
+  }
+
   board::I2cLock lock;
   M5.Display.clear();
   M5.Display.setCursor(0, 0);
@@ -40,6 +54,10 @@ void show_text(const char *line1, const char *line2) {
 }
 
 void append_line(const char *line) {
+  if (!display_ready()) {
+    return;
+  }
+
   board::I2cLock lock;
   M5.Display.println(line);
 }

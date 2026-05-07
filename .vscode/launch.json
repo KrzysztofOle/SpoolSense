@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ESP-IDF Debug",
+            "type": "espidf",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/spoolsense.elf",
+            "cwd": "${workspaceFolder}",
+            "miDebuggerPath": "${command:espIdf.getToolchainGdb}",
+            "preLaunchTask": "Build",
+            "verbose": true
+        }
+    ]
+}

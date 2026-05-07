@@ -22,7 +22,7 @@ class Hx711Monitor {
   Hx711Monitor();
 
   void begin();
-  bool is_ready() const;
+  bool is_ready();
   bool read_raw(long *raw_value);
 
  private:
