@@ -11,22 +11,35 @@
 #include "HX711.h"
 
 // TEENSYDUINO has a port of Dean Camera's ATOMIC_BLOCK macros for AVR to ARM Cortex M3.
-#define HAS_ATOMIC_BLOCK (defined(ARDUINO_ARCH_AVR) || defined(TEENSYDUINO))
+#if defined(ARDUINO_ARCH_AVR) || defined(TEENSYDUINO)
+#define HAS_ATOMIC_BLOCK 1
+#else
+#define HAS_ATOMIC_BLOCK 0
+#endif
 
 // Whether we are running on either the ESP8266 or the ESP32.
-#define ARCH_ESPRESSIF (defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32))
+#if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32)
+#define ARCH_ESPRESSIF 1
+#else
+#define ARCH_ESPRESSIF 0
+#endif
 
 // Whether we are actually running on FreeRTOS.
-#define IS_FREE_RTOS defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32)
+#define IS_FREE_RTOS 1
+#else
+#define IS_FREE_RTOS 0
+#endif
 
 // Define macro designating whether we're running on a reasonable
 // fast CPU and so should slow down sampling from GPIO.
-#define FAST_CPU \
-    ( \
-    ARCH_ESPRESSIF || \
-    defined(ARDUINO_ARCH_SAM)     || defined(ARDUINO_ARCH_SAMD) || \
-    defined(ARDUINO_ARCH_STM32)   || defined(TEENSYDUINO) \
-    )
+#if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32) || \
+    defined(ARDUINO_ARCH_SAM) || defined(ARDUINO_ARCH_SAMD) || \
+    defined(ARDUINO_ARCH_STM32) || defined(TEENSYDUINO)
+#define FAST_CPU 1
+#else
+#define FAST_CPU 0
+#endif
 
 #if HAS_ATOMIC_BLOCK
 // Acquire AVR-specific ATOMIC_BLOCK(ATOMIC_RESTORESTATE) macro.
