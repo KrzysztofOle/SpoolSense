@@ -2,7 +2,7 @@
 
 #if ENABLE_HW_TESTS
 void runRfidTest() {
-  // Legacy hardware test intentionally disabled while the PN532 init
-  // diagnostic runs from src/main.cpp with Adafruit PN532.
+  // Legacy hardware test intentionally disabled while the PN532 logic now
+  // lives in the dedicated pn532 component.
 }
 #endif

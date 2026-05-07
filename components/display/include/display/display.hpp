@@ -1,0 +1,28 @@
+/**
+ * M5 display helpers for the current firmware UI.
+ *
+ * Features (EN):
+ * - Initializes the M5 display.
+ * - Renders status, RFID, and diagnostic messages.
+ *
+ * Funkcje (PL):
+ * - Inicjalizuje wyswietlacz M5.
+ * - Rysuje status, RFID oraz komunikaty diagnostyczne.
+ *
+ * File: components/display/include/display/display.hpp
+ */
+
+#pragma once
+
+#include <stdint.h>
+
+namespace display {
+void begin();
+void show_text(const char *line1, const char *line2 = nullptr);
+void append_line(const char *line);
+void show_card_removed();
+void show_uid_and_type(const uint8_t *uid, uint8_t uid_length);
+void show_uid_and_usage(const uint8_t *uid, uint8_t uid_length, uint32_t usage_seconds,
+                        uint8_t life_percent);
+void show_page_read_failed();
+}  // namespace display

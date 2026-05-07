@@ -42,15 +42,15 @@ Projekt zawiera proste testy sprzętowe HX711 i PN532 uruchamiane bezpośrednio 
 
 ### Włączenie testów
 
-- Otwórz [`src/main.cpp`](src/main.cpp)
+- Otwórz [`platformio.ini`](platformio.ini)
 - Znajdź flagę `ENABLE_HW_TESTS`
 - Ustaw ją na `1`:
 
-```cpp
-#define ENABLE_HW_TESTS 1
+```ini
+-DENABLE_HW_TESTS=1
 ```
 
-- Po wgraniu firmware testy będą wykonywane z `main.cpp`
+- Po wgraniu firmware testy nadal uruchamiają się w ramach firmware, a `src/main.cpp` pozostaje tylko cienkim wrapperem `setup()` / `loop()`
 
 ### Okablowanie
 
@@ -86,6 +86,17 @@ Oczekiwane komunikaty:
 - dla tagów NTAG213 odczytywana jest strona `0x24` bez zapisu do taga
 - w `Serial` pojawiają się: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
 - licznik jest interpretowany jako little-endian, a przeliczenie czasu jest heurystyczne dla końcówek Philips Sonicare
+
+## 🧱 Code Layout
+
+- `src/main.cpp` - thin Arduino wrapper for `setup()` / `loop()`
+- `components/app` - firmware orchestration
+- `components/board` - pin assignments and board-level bus setup
+- `components/pn532` - RFID logic
+- `components/hx711` - HX711 polling
+- `components/display` - M5 display handling
+- `components/diagnostics` - logging and formatting helpers
+- `main/` - future ESP-IDF entry point scaffold
 
 ### Troubleshooting
 
