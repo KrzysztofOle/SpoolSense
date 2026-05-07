@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T18:51:31+02:00</small>
+<small>Last updated: 2026-05-07T19:00:19+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -44,12 +44,19 @@ The firmware now runs as a FreeRTOS task-based runtime instead of a single appli
 
 Startup creates separate tasks for:
 
+- central App Task that owns application state
 - RFID / PN532 polling
 - HX711 sampling
 - display rendering
 - diagnostics and status logging
 
-The app layer owns lifecycle startup and recovery. The current stage does not use an event bus or queue-driven messaging model yet.
+The app layer owns lifecycle startup and recovery. Task-to-task communication is now queue-based:
+
+- RFID Task publishes RFID events to the App Task
+- HX711 Task publishes weight updates to the App Task
+- App Task publishes UI state snapshots to the UI Task
+
+The App Task is the single owner of mutable application state and aggregates sensor data before the UI renders it.
 
 After the ESP-IDF migration, the same task split remains the execution model for the firmware.
 
