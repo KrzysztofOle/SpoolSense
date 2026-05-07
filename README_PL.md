@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-07T19:00:19+02:00</small>
+<small>Last updated: 2026-05-07T19:20:22+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -44,19 +44,19 @@ Firmware działa teraz jako runtime oparty o taski FreeRTOS zamiast pojedynczej 
 
 Start tworzy osobne taski dla:
 
-- centralnego App Task, który posiada stan aplikacji
+- centralnego App Task, który posiada jawną maszynę stanów aplikacji
 - odczytu RFID / PN532
 - próbkowania HX711
 - renderowania wyświetlacza
 - diagnostyki i logów stanu
 
-Warstwa `app` odpowiada za lifecycle startupu i recovery. Komunikacja między taskami jest teraz oparta o kolejki:
+Warstwa `app` odpowiada za lifecycle startupu, recovery i logikę przejść stanów. Komunikacja między taskami jest oparta o kolejki:
 
 - RFID Task publikuje eventy RFID do App Task
 - HX711 Task publikuje aktualizacje wagi do App Task
 - App Task publikuje snapshoty stanu UI do UI Task
 
-App Task jest jedynym właścicielem mutowalnego stanu aplikacji i agreguje dane sensorów przed renderowaniem UI.
+App Task jest jedynym właścicielem mutowalnego stanu aplikacji, wykonuje logikę FSM i agreguje dane sensorów przed renderowaniem UI. `UiState` przenosi aktualny `AppMode`, więc wyświetlacz może reagować na stany Boot, Idle, TagDetected, Measuring, Error i Calibration.
 
 Po migracji do ESP-IDF ten sam podział na taski pozostaje modelem wykonania firmware.
 
