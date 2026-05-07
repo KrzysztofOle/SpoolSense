@@ -1,13 +1,13 @@
 /**
- * PN532 RFID helper that keeps the current tag handling behavior.
+ * PN532 RFID access helper for the task-based runtime.
  *
  * Features (EN):
  * - Initializes PN532 over I2C.
- * - Polls tags and reports Sonicare usage data without changing behavior.
+ * - Exposes low-level tag and page reads for the RFID task.
  *
  * Funkcje (PL):
  * - Inicjalizuje PN532 po I2C.
- * - Odpytuje tagi i raportuje dane uzycia Sonicare bez zmiany zachowania.
+ * - Udostepnia niskopoziomowe odczyty tagow i stron dla taska RFID.
  *
  * File: components/pn532/include/pn532/pn532_reader.hpp
  */
@@ -21,18 +21,14 @@ class Pn532Reader {
  public:
   Pn532Reader();
 
-  void begin();
-  void update();
-
- private:
-  bool same_uid(const uint8_t *uid, uint8_t uid_length) const;
-  void store_uid(const uint8_t *uid, uint8_t uid_length);
+  bool begin();
+  uint32_t firmware_version() const {
+    return firmware_version_;
+  }
+  bool read_passive_target(uint8_t *uid, uint8_t *uid_length, uint16_t timeout_ms);
   bool read_sonicare_usage_page(uint8_t *page_data);
 
+ private:
   Adafruit_PN532 pn532_;
-  uint8_t last_uid_[10];
-  uint8_t last_uid_length_;
-  bool has_last_uid_;
-  uint32_t last_card_seen_at_ms_;
-  uint32_t next_card_poll_at_ms_;
+  uint32_t firmware_version_;
 };

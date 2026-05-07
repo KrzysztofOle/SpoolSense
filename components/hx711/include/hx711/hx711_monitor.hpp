@@ -1,13 +1,13 @@
 /**
- * HX711 polling helper for the current firmware flow.
+ * HX711 access helper for the task-based runtime.
  *
  * Features (EN):
- * - Keeps the existing HX711 initialization and sampling behavior.
- * - Exposes a small update loop for orchestration.
+ * - Initializes the HX711 interface.
+ * - Exposes direct readiness and raw sampling access for the HX711 task.
  *
  * Funkcje (PL):
- * - Zachowuje obecne zachowanie inicjalizacji i probkowania HX711.
- * - Udostepnia mala petle update dla orkiestracji.
+ * - Inicjalizuje interfejs HX711.
+ * - Udostepnia bezposredni dostep do gotowosci i probkowania dla taska HX711.
  *
  * File: components/hx711/include/hx711/hx711_monitor.hpp
  */
@@ -22,12 +22,9 @@ class Hx711Monitor {
   Hx711Monitor();
 
   void begin();
-  void update();
+  bool is_ready() const;
+  bool read_raw(long *raw_value);
 
  private:
   HX711 scale_;
-  bool scale_initialized_;
-  bool scale_ready_;
-  uint32_t next_hx711_sample_at_ms_;
-  uint32_t next_hx711_init_retry_at_ms_;
 };

@@ -19,15 +19,18 @@
 #include <cstdio>
 #include <cstring>
 
+#include "board/board.hpp"
 #include "diagnostics/diagnostics.hpp"
 
 namespace display {
 void begin() {
+  board::I2cLock lock;
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(WHITE, BLACK);
 }
 
 void show_text(const char *line1, const char *line2) {
+  board::I2cLock lock;
   M5.Display.clear();
   M5.Display.setCursor(0, 0);
   M5.Display.println(line1);
@@ -37,6 +40,7 @@ void show_text(const char *line1, const char *line2) {
 }
 
 void append_line(const char *line) {
+  board::I2cLock lock;
   M5.Display.println(line);
 }
 

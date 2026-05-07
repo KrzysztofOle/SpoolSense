@@ -11,6 +11,8 @@
  */
 
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "app/app.hpp"
 
@@ -21,7 +23,6 @@ extern "C" void app_main(void) {
   app.begin();
 
   for (;;) {
-    app.loop();
-    delay(1);
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }

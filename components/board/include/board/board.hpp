@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <stdint.h>
 
 namespace board {
@@ -25,4 +27,23 @@ constexpr uint8_t kHx711DoutPin = 16;
 constexpr uint8_t kHx711SckPin = 4;
 
 void begin_pn532_wire();
+void begin_i2c_mutex();
+bool take_i2c(TickType_t timeout_ticks = portMAX_DELAY);
+void give_i2c();
+
+class I2cLock {
+ public:
+  explicit I2cLock(TickType_t timeout_ticks = portMAX_DELAY);
+  ~I2cLock();
+
+  I2cLock(const I2cLock&) = delete;
+  I2cLock& operator=(const I2cLock&) = delete;
+
+  bool acquired() const {
+    return acquired_;
+  }
+
+ private:
+  bool acquired_;
+};
 }  // namespace board

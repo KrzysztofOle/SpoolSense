@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T18:00:22+02:00</small>
+<small>Last updated: 2026-05-07T18:51:31+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -38,11 +38,20 @@ This allows:
 - RFID reader (e.g. PN532)
 - Optional temperature sensor (dryer integration)
 
-## 🔧 Hardware Tests
+## 🔧 Runtime Model
 
-The project includes simple HX711 and PN532 hardware checks that run directly in firmware. They are intended for quick validation of wiring and module behavior, not as a separate application architecture.
+The firmware now runs as a FreeRTOS task-based runtime instead of a single application loop.
 
-After the ESP-IDF migration, the checks run as part of the normal firmware startup.
+Startup creates separate tasks for:
+
+- RFID / PN532 polling
+- HX711 sampling
+- display rendering
+- diagnostics and status logging
+
+The app layer owns lifecycle startup and recovery. The current stage does not use an event bus or queue-driven messaging model yet.
+
+After the ESP-IDF migration, the same task split remains the execution model for the firmware.
 
 ### Okablowanie
 
@@ -82,7 +91,7 @@ Expected messages:
 ## 🧱 Code Layout
 
 - `main/src/main.cpp` - ESP-IDF entry point with `app_main()`
-- `components/app` - firmware orchestration
+- `components/app` - firmware orchestration and FreeRTOS task lifecycle
 - `components/board` - pin assignments and board-level bus setup
 - `components/pn532` - RFID logic plus local Arduino PN532 compatibility sources
 - `components/hx711` - HX711 polling plus local Arduino HX711 compatibility source
