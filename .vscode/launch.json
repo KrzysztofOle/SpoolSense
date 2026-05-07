@@ -2,14 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "ESP-IDF Debug",
-            "type": "espidf",
+            "name": "Run firmware (USB)",
+            "type": "node-terminal",
             "request": "launch",
-            "program": "${workspaceFolder}/build/spoolsense.elf",
             "cwd": "${workspaceFolder}",
-            "miDebuggerPath": "${command:espIdf.getToolchainGdb}",
-            "preLaunchTask": "Build",
-            "verbose": true
+            "command": "${workspaceFolder}/tools/run_firmware.sh"
         }
     ]
 }

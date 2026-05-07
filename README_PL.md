@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-07T21:46:13+02:00</small>
+<small>Last updated: 2026-05-07T22:23:28+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -138,6 +138,8 @@ Oczekiwane komunikaty:
 4. `Flash + Monitor` uruchamia `idf.py flash monitor`
 5. `Full Clean` uruchamia `idf.py fullclean`
 6. `Reconfigure` uruchamia `idf.py reconfigure`
+
+Konfiguracja ESP-IDF używa teraz flasha `16MB`, aby odpowiadala zainstalowanemu modulowi ESP32.
 
 ### Ręczny workflow CLI
 

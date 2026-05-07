@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T21:46:13+02:00</small>
+<small>Last updated: 2026-05-07T22:23:28+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -138,6 +138,8 @@ Expected messages:
 4. `Flash + Monitor` runs `idf.py flash monitor`
 5. `Full Clean` runs `idf.py fullclean`
 6. `Reconfigure` runs `idf.py reconfigure`
+
+The ESP-IDF configuration targets `16MB` flash to match the installed ESP32 module.
 
 ### Manual CLI workflow
 

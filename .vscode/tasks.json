@@ -5,10 +5,7 @@
             "label": "Build",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py build"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh build"],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -19,10 +16,7 @@
             "label": "Flash",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py flash"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh flash"],
             "dependsOn": "Build",
             "problemMatcher": "$gcc"
         },
@@ -30,20 +24,14 @@
             "label": "Monitor",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py monitor"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh monitor"],
             "problemMatcher": []
         },
         {
             "label": "Flash + Monitor",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py flash monitor"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh flash monitor"],
             "dependsOn": "Build",
             "problemMatcher": []
         },
@@ -51,20 +39,14 @@
             "label": "Full Clean",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py fullclean"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh fullclean"],
             "problemMatcher": []
         },
         {
             "label": "Reconfigure",
             "type": "shell",
             "command": "bash",
-            "args": [
-                "-lc",
-                "export_cmd=$(PATH=/usr/bin:/bin:/usr/sbin:/sbin IDF_PATH=/Users/krzysztof/esp/esp-idf IDF_TOOLS_PATH=/Users/krzysztof/.espressif ${PYTHON:-/usr/local/bin/python3} /Users/krzysztof/esp/esp-idf/tools/idf_tools.py export --format shell --prefer-system) && eval \"$export_cmd\" && idf.py reconfigure"
-            ],
+            "args": ["-lc", "./tools/run_idf.sh reconfigure"],
             "problemMatcher": []
         }
     ]

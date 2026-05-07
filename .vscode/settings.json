@@ -12,7 +12,6 @@
     "ESPPORT": "/dev/cu.usbserial-54790111331",
     "ESPBAUD": "115200"
   },
-  "idf.openOcdDebugLevel": 0,
   "idf.saveBeforeBuild": true,
   "idf.useIDFKconfigStyle": true,
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
