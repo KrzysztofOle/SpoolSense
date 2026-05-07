@@ -81,6 +81,9 @@ Oczekiwane komunikaty:
 - `PN532 init OK`
 - `PN532 not found`
 - UID karty RFID wypisywany po zbliżeniu tagu
+- dla tagów NTAG213 odczytywana jest strona `0x24` bez zapisu do taga
+- w `Serial` pojawiają się: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
+- licznik jest interpretowany jako little-endian, a przeliczenie czasu jest heurystyczne dla końcówek Philips Sonicare
 
 ### Troubleshooting
 

@@ -14,6 +14,9 @@ constexpr uint32_t kCardPollIntervalMs = 400;
 constexpr uint32_t kCardGoneTimeoutMs = 1600;
 constexpr uint16_t kReadTimeoutMs = 50;
 constexpr uint8_t kMaxUidLength = 10;
+constexpr uint8_t kSonicareUsagePage = 0x24;
+constexpr uint32_t kSonicareSecondsPerCountX100 = 2055;  // 20.55 s per raw unit.
+constexpr uint32_t kSonicareEstimatedLifeSeconds = 22000;  // Heuristic full-life estimate.
 constexpr uint8_t kHx711DoutPin = 16;
 constexpr uint8_t kHx711SckPin = 4;
 constexpr uint32_t kHx711SampleIntervalMs = 700;
@@ -62,6 +65,23 @@ void formatUid(const uint8_t *uid, uint8_t uidLength, char *buffer, size_t buffe
   }
 }
 
+void formatHexBytes(const uint8_t *data, uint8_t dataLength, char *buffer, size_t bufferSize) {
+  size_t offset = 0;
+  if (bufferSize == 0) {
+    return;
+  }
+
+  buffer[0] = '\0';
+  for (uint8_t i = 0; i < dataLength && offset + 3 < bufferSize; ++i) {
+    const int written = snprintf(buffer + offset, bufferSize - offset,
+                                 (i == 0) ? "%02X" : " %02X", data[i]);
+    if (written <= 0) {
+      break;
+    }
+    offset += static_cast<size_t>(written);
+  }
+}
+
 const char *classifyTagType(uint8_t uidLength) {
   switch (uidLength) {
     case 4:
@@ -84,6 +104,25 @@ void storeUid(const uint8_t *uid, uint8_t uidLength) {
   hasLastUid = true;
 }
 
+uint16_t readLittleEndianU16(const uint8_t *data) {
+  return static_cast<uint16_t>(data[0]) |
+         (static_cast<uint16_t>(data[1]) << 8);
+}
+
+uint32_t sonicareCountsToSeconds(uint16_t rawCount) {
+  return (static_cast<uint32_t>(rawCount) * kSonicareSecondsPerCountX100 + 50U) / 100U;
+}
+
+uint8_t estimateLifePercent(uint32_t usageSeconds) {
+  const uint32_t percent =
+      (usageSeconds * 100U + (kSonicareEstimatedLifeSeconds / 2U)) / kSonicareEstimatedLifeSeconds;
+  return static_cast<uint8_t>(percent > 100U ? 100U : percent);
+}
+
+bool readSonicareUsagePage(uint8_t *pageData) {
+  return pn532->ntag2xx_ReadPage(kSonicareUsagePage, pageData);
+}
+
 void showUidAndTypeOnDisplay(const uint8_t *uid, uint8_t uidLength) {
   char uidLine[48] = {};
   formatUid(uid, uidLength, uidLine, sizeof(uidLine));
@@ -100,6 +139,55 @@ void printUidAndTypeToSerial(const uint8_t *uid, uint8_t uidLength) {
 
   Serial.print("UID: ");
   Serial.println(uidLine);
+  Serial.print("Type: ");
+  Serial.println(classifyTagType(uidLength));
+}
+
+void showUidAndUsageOnDisplay(const uint8_t *uid, uint8_t uidLength, uint32_t usageSeconds,
+                              uint8_t lifePercent) {
+  char uidLine[48] = {};
+  formatUid(uid, uidLength, uidLine, sizeof(uidLine));
+
+  char usageLine[48] = {};
+  snprintf(usageLine, sizeof(usageLine), "Usage: %lu s", static_cast<unsigned long>(usageSeconds));
+  size_t used = strlen(usageLine);
+  if (used + 1 < sizeof(usageLine)) {
+    snprintf(usageLine + used, sizeof(usageLine) - used, " Life: %u%%",
+             static_cast<unsigned>(lifePercent));
+  }
+
+  showText(uidLine, usageLine);
+}
+
+void printUidAndUsageToSerial(const uint8_t *uid, uint8_t uidLength, const uint8_t *pageData,
+                              uint32_t usageSeconds, uint8_t lifePercent) {
+  char uidLine[48] = {};
+  formatUid(uid, uidLength, uidLine, sizeof(uidLine));
+
+  Serial.print("UID: ");
+  Serial.println(uidLine);
+
+  char pageLine[32] = {};
+  formatHexBytes(pageData, 4, pageLine, sizeof(pageLine));
+  Serial.print("Page 24: ");
+  Serial.println(pageLine);
+
+  Serial.print("Usage: ");
+  Serial.print(static_cast<unsigned long>(usageSeconds));
+  Serial.println(" s");
+
+  Serial.print("Life: ");
+  Serial.print(static_cast<unsigned>(lifePercent));
+  Serial.println('%');
+
+  Serial.print("RFID: UID=");
+  Serial.print(uidLine);
+  Serial.print(" Usage=");
+  Serial.print(static_cast<unsigned long>(usageSeconds));
+  Serial.print("s Life=");
+  Serial.print(static_cast<unsigned>(lifePercent));
+  Serial.println('%');
+
   Serial.print("Type: ");
   Serial.println(classifyTagType(uidLength));
 }
@@ -192,8 +280,21 @@ void runRfidTest() {
 
   if (!sameUid(uid, uidLength)) {
     storeUid(uid, uidLength);
-    printUidAndTypeToSerial(uid, uidLength);
-    showUidAndTypeOnDisplay(uid, uidLength);
+
+    uint8_t usagePage[4] = {};
+    if (readSonicareUsagePage(usagePage)) {
+      const uint16_t rawCount = readLittleEndianU16(usagePage);
+      const uint32_t usageSeconds = sonicareCountsToSeconds(rawCount);
+      const uint8_t lifePercent = estimateLifePercent(usageSeconds);
+
+      printUidAndUsageToSerial(uid, uidLength, usagePage, usageSeconds, lifePercent);
+      showUidAndUsageOnDisplay(uid, uidLength, usageSeconds, lifePercent);
+    } else {
+      printUidAndTypeToSerial(uid, uidLength);
+      showUidAndTypeOnDisplay(uid, uidLength);
+      Serial.println("Page 24: read failed");
+      M5.Display.println("Page 24: read failed");
+    }
   }
 
   delay(10);
