@@ -1,13 +1,13 @@
 /**
- * Future ESP-IDF entry point scaffold.
+ * ESP-IDF entry point for the current firmware flow.
  *
  * Features (EN):
- * - Hosts the native app_main entry point for the migration path.
+ * - Hosts the native app_main entry point.
  *
  * Funkcje (PL):
- * - Zawiera natywny punkt wejsciowy app_main dla sciezki migracji.
+ * - Zawiera natywny punkt wejsciowy app_main.
  *
- * File: main/main.cpp
+ * File: main/src/main.cpp
  */
 
 #include <Arduino.h>

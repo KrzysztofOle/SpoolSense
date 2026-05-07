@@ -2,6 +2,8 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
+<small>Last updated: 2026-05-07T18:00:22+02:00</small>
+
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
 
@@ -38,19 +40,9 @@ This allows:
 
 ## 🔧 Hardware Tests
 
-Projekt zawiera proste testy sprzętowe HX711 i PN532 uruchamiane bezpośrednio z firmware. To są testy do szybkiej weryfikacji okablowania i działania modułów, nie osobna architektura aplikacji.
+The project includes simple HX711 and PN532 hardware checks that run directly in firmware. They are intended for quick validation of wiring and module behavior, not as a separate application architecture.
 
-### Włączenie testów
-
-- Otwórz [`platformio.ini`](platformio.ini)
-- Znajdź flagę `ENABLE_HW_TESTS`
-- Ustaw ją na `1`:
-
-```ini
--DENABLE_HW_TESTS=1
-```
-
-- Po wgraniu firmware testy nadal uruchamiają się w ramach firmware, a `src/main.cpp` pozostaje tylko cienkim wrapperem `setup()` / `loop()`
+After the ESP-IDF migration, the checks run as part of the normal firmware startup.
 
 ### Okablowanie
 
@@ -67,41 +59,48 @@ Projekt zawiera proste testy sprzętowe HX711 i PN532 uruchamiane bezpośrednio 
 - `SCL` -> `GPIO22`
 - `VCC` -> `3.3V`
 - `GND` -> `GND`
-- Ustaw moduł w tryb `I2C` za pomocą `DIP switch`
+- Set the module to `I2C` mode using the `DIP switch`
 
-### Jak testować
+### How to Test
 
-1. Wgraj firmware z włączonym `ENABLE_HW_TESTS`
-2. Uruchom monitor portu szeregowego z prędkością `115200`
-3. Sprawdź logi startowe i odczyty
+1. Flash the firmware
+2. Open the serial monitor at `115200`
+3. Check the startup logs and readings
 
-Oczekiwane komunikaty:
+Expected messages:
 
 - `HX711 init OK`
 - `HX711 not found`
-- odczyty wagi wypisywane cyklicznie przez `Serial`
+- weight readings printed periodically over `Serial`
 - `PN532 init OK`
 - `PN532 not found`
-- UID karty RFID wypisywany po zbliżeniu tagu
-- dla tagów NTAG213 odczytywana jest strona `0x24` bez zapisu do taga
-- w `Serial` pojawiają się: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
-- licznik jest interpretowany jako little-endian, a przeliczenie czasu jest heurystyczne dla końcówek Philips Sonicare
+- RFID UID printed when a tag is presented
+- for NTAG213 tags, page `0x24` is read without writing to the tag
+- `Serial` shows: `Page 24: ...`, `Usage: ... s`, `Life: ...%`
+- the counter is interpreted as little-endian, and the time conversion is a heuristic for Philips Sonicare brush heads
 
 ## 🧱 Code Layout
 
-- `src/main.cpp` - thin Arduino wrapper for `setup()` / `loop()`
+- `main/src/main.cpp` - ESP-IDF entry point with `app_main()`
 - `components/app` - firmware orchestration
 - `components/board` - pin assignments and board-level bus setup
-- `components/pn532` - RFID logic
-- `components/hx711` - HX711 polling
+- `components/pn532` - RFID logic plus local Arduino PN532 compatibility sources
+- `components/hx711` - HX711 polling plus local Arduino HX711 compatibility source
 - `components/display` - M5 display handling
 - `components/diagnostics` - logging and formatting helpers
-- `main/` - future ESP-IDF entry point scaffold
+- `sdkconfig.defaults` - base ESP-IDF configuration
+
+### Building
+
+1. Activate the ESP-IDF environment.
+2. Run `idf.py set-target esp32` once for this project.
+3. Run `idf.py build`.
+4. Flash and monitor with `idf.py flash monitor`.
 
 ### Troubleshooting
 
-- `PN532 not found` -> sprawdź tryb komunikacji `I2C`, ustawienie `DIP switch` i zasilanie modułu
-- brak odczytu z `HX711` -> sprawdź piny `DOUT` / `SCK` oraz zasilanie `3.3V`
+- `PN532 not found` -> check the `I2C` mode, `DIP switch` setting, and module power
+- no HX711 reading -> check the `DOUT` / `SCK` pins and `3.3V` power
 
 ## 💻 Software (planned)
 

@@ -2,6 +2,8 @@
 
 Wersja angielska: [README.md](README.md)
 
+<small>Last updated: 2026-05-07T18:00:22+02:00</small>
+
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
 
@@ -40,17 +42,7 @@ Dzięki temu możliwe jest:
 
 Projekt zawiera proste testy sprzętowe HX711 i PN532 uruchamiane bezpośrednio z firmware. To są testy do szybkiej weryfikacji okablowania i działania modułów, a nie osobna architektura aplikacji.
 
-### Włączenie testów
-
-- Otwórz [`platformio.ini`](platformio.ini)
-- Znajdź flagę `ENABLE_HW_TESTS`
-- Ustaw ją na `1`:
-
-```ini
--DENABLE_HW_TESTS=1
-```
-
-- Po wgraniu firmware testy nadal uruchamiają się w ramach firmware, a `src/main.cpp` pozostaje tylko cienkim wrapperem `setup()` / `loop()`
+Po migracji do ESP-IDF testy są uruchamiane jako część standardowego startu firmware.
 
 ### Okablowanie
 
@@ -71,7 +63,7 @@ Projekt zawiera proste testy sprzętowe HX711 i PN532 uruchamiane bezpośrednio 
 
 ### Jak testować
 
-1. Wgraj firmware z włączonym `ENABLE_HW_TESTS`
+1. Wgraj firmware
 2. Uruchom monitor portu szeregowego z prędkością `115200`
 3. Sprawdź logi startowe i odczyty
 
@@ -89,14 +81,21 @@ Oczekiwane komunikaty:
 
 ## 🧱 Układ kodu
 
-- `src/main.cpp` - cienki wrapper Arduino dla `setup()` / `loop()`
+- `main/src/main.cpp` - punkt wejścia ESP-IDF z `app_main()`
 - `components/app` - orkiestracja firmware
 - `components/board` - przypisania pinów i uruchomienie magistrali
-- `components/pn532` - logika RFID
-- `components/hx711` - odpytywanie HX711
+- `components/pn532` - logika RFID oraz lokalne źródła zgodności Arduino dla PN532
+- `components/hx711` - odpytywanie HX711 oraz lokalne źródło zgodności Arduino dla HX711
 - `components/display` - obsługa wyświetlacza M5
 - `components/diagnostics` - logowanie i formatowanie danych
-- `main/` - szkic punktu wejścia dla przyszłego ESP-IDF
+- `sdkconfig.defaults` - bazowa konfiguracja ESP-IDF
+
+### Budowanie
+
+1. Aktywuj środowisko ESP-IDF.
+2. Uruchom `idf.py set-target esp32` raz dla tego projektu.
+3. Uruchom `idf.py build`.
+4. Wgraj i podglądaj logi przez `idf.py flash monitor`.
 
 ### Rozwiązywanie problemów
 
