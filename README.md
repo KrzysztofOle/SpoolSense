@@ -1,5 +1,7 @@
 # 🧵 SpoolSense
 
+Polish version: [README_PL.md](README_PL.md)
+
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
 
