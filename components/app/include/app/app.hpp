@@ -3,12 +3,12 @@
  *
  * Features (EN):
  * - Owns firmware lifecycle startup and shutdown.
- * - Starts the App, RFID, HX711, UI, and diagnostics tasks.
+ * - Starts the App, RFID, optional HX711, UI, and diagnostics tasks.
  * - Handles queues and runtime communication between components.
  *
  * Funkcje (PL):
  * - Zarzadza startem i zatrzymaniem cyklu zycia firmware.
- * - Uruchamia taski App, RFID, HX711, UI i diagnostyki.
+ * - Uruchamia taski App, RFID, opcjonalny HX711, UI i diagnostyki.
  * - Obsluguje kolejki oraz komunikacje miedzy komponentami runtime.
  *
  * File: components/app/include/app/app.hpp
@@ -49,6 +49,7 @@ class App {
   void hx711_task_loop();
   void ui_task_loop();
   void diagnostics_task_loop();
+  void handle_button_input(AppState &state, bool &handled_event);
   void start_tasks();
   void stop_tasks();
   void reset_state();

@@ -19,6 +19,13 @@
 namespace app {
 constexpr uint8_t kMaxRfidUidLength = 10;
 
+enum class ButtonKind : uint8_t {
+  kNone,
+  kA,
+  kB,
+  kC,
+};
+
 struct RfidEvent {
   enum class Kind : uint8_t {
     kReaderMissing,
@@ -51,6 +58,11 @@ struct WeightEvent {
   Kind kind = Kind::kNotFound;
   bool has_sample = false;
   long raw_value = 0;
+  uint32_t timestamp_ms = 0;
+};
+
+struct ButtonEvent {
+  ButtonKind kind = ButtonKind::kNone;
   uint32_t timestamp_ms = 0;
 };
 }  // namespace app

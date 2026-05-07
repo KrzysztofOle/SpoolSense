@@ -29,6 +29,7 @@ class AppFsm {
   void reset(AppState &state, uint32_t now_ms) const;
   bool handle_event(AppState &state, const RfidEvent &event) const;
   bool handle_event(AppState &state, const WeightEvent &event) const;
+  bool handle_event(AppState &state, const ButtonEvent &event) const;
   bool handle_timeouts(AppState &state, uint32_t now_ms) const;
 
  private:

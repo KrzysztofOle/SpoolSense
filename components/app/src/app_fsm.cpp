@@ -3,11 +3,13 @@
  *
  * Features (EN):
  * - Applies RFID and HX711 events to AppState.
+ * - Keeps RFID/UI mode operational when HX711 is disabled.
  * - Encapsulates transition logic and timeout handling.
  * - Avoids FreeRTOS, queues, display, and sensor driver dependencies.
  *
  * Funkcje (PL):
  * - Aplikuje zdarzenia RFID i HX711 do AppState.
+ * - Utrzymuje tryb RFID/UI gdy HX711 jest wylaczony.
  * - Hermetyzuje logike przejsc oraz timeouty.
  * - Nie zalezy od FreeRTOS, kolejek, wyswietlacza ani driverow.
  *
@@ -17,6 +19,8 @@
 #include "app/app_fsm.hpp"
 
 #include <cstring>
+
+#include <sdkconfig.h>
 
 namespace app {
 namespace {
@@ -31,7 +35,13 @@ void AppFsm::reset(AppState &state, uint32_t now_ms) const {
   state = AppState{};
   state.current_mode = AppMode::kBoot;
   state.rfid_status = RfidStatus::kBooting;
-  state.hx711_status = Hx711Status::kBooting;
+#if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
+  state.hx711_enabled = true;
+  state.hx711_status = state.hx711_enabled ? Hx711Status::kBooting : Hx711Status::kDisabled;
+#else
+  state.hx711_enabled = false;
+  state.hx711_status = Hx711Status::kDisabled;
+#endif
   state.rfid_last_change_ms = now_ms;
   state.hx711_last_sample_ms = now_ms;
 }
@@ -55,13 +65,14 @@ void AppFsm::sync_mode(AppState &state) {
     return;
   }
 
-  if (state.rfid_status == RfidStatus::kBooting || state.hx711_status == Hx711Status::kBooting) {
+  if (state.rfid_status == RfidStatus::kBooting ||
+      (state.hx711_enabled && state.hx711_status == Hx711Status::kBooting)) {
     (void)transition_to(state, AppMode::kBoot);
     return;
   }
 
   if (state.rfid_status == RfidStatus::kCardPresent) {
-    if (state.rfid_has_uid && state.hx711_has_sample) {
+    if (state.hx711_enabled && state.rfid_has_uid && state.hx711_has_sample) {
       (void)transition_to(state, AppMode::kMeasuring);
       return;
     }
@@ -152,6 +163,10 @@ bool AppFsm::handle_event(AppState &state, const RfidEvent &event) const {
 }
 
 bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
+  if (!state.hx711_enabled) {
+    return false;
+  }
+
   state.hx711_last_sample_ms = event.timestamp_ms;
 
   switch (event.kind) {
@@ -178,6 +193,12 @@ bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
   return false;
 }
 
+bool AppFsm::handle_event(AppState &state, const ButtonEvent &event) const {
+  state.last_button = event.kind;
+  state.last_button_ms = event.timestamp_ms;
+  return true;
+}
+
 bool AppFsm::handle_timeouts(AppState &state, uint32_t now_ms) const {
   if (state.current_mode == AppMode::kError || state.current_mode == AppMode::kCalibration) {
     return false;
@@ -187,7 +208,8 @@ bool AppFsm::handle_timeouts(AppState &state, uint32_t now_ms) const {
     return transition_to(state, AppMode::kError);
   }
 
-  if (state.hx711_status == Hx711Status::kBooting && now_ms - state.hx711_last_sample_ms > kAppStartupTimeoutMs) {
+  if (state.hx711_enabled && state.hx711_status == Hx711Status::kBooting &&
+      now_ms - state.hx711_last_sample_ms > kAppStartupTimeoutMs) {
     return transition_to(state, AppMode::kError);
   }
 

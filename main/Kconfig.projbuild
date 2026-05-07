@@ -1,0 +1,10 @@
+menu "SpoolSense configuration"
+
+config SPOOLSENSE_ENABLE_HX711
+    bool "Enable HX711 subsystem"
+    default n
+    help
+        Enable the HX711 task and related measurement flow.
+        When disabled, the firmware runs in RFID/UI developer mode.
+
+endmenu

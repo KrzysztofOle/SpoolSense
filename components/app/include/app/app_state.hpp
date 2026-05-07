@@ -38,6 +38,7 @@ enum class RfidStatus : uint8_t {
 
 enum class Hx711Status : uint8_t {
   kBooting,
+  kDisabled,
   kNotFound,
   kReady,
 };
@@ -46,6 +47,7 @@ struct AppState {
   AppMode current_mode = AppMode::kBoot;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
+  bool hx711_enabled = true;
   bool rfid_has_uid = false;
   bool rfid_usage_available = false;
   bool rfid_page_read_failed = false;
@@ -58,12 +60,15 @@ struct AppState {
   long hx711_raw_value = 0;
   uint32_t rfid_last_change_ms = 0;
   uint32_t hx711_last_sample_ms = 0;
+  ButtonKind last_button = ButtonKind::kNone;
+  uint32_t last_button_ms = 0;
 };
 
 struct UiState {
   AppMode current_mode = AppMode::kBoot;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
+  bool hx711_enabled = true;
   bool rfid_has_uid = false;
   bool rfid_usage_available = false;
   bool rfid_page_read_failed = false;
@@ -76,5 +81,7 @@ struct UiState {
   long hx711_raw_value = 0;
   uint32_t rfid_last_change_ms = 0;
   uint32_t hx711_last_sample_ms = 0;
+  ButtonKind last_button = ButtonKind::kNone;
+  uint32_t last_button_ms = 0;
 };
 }  // namespace app
