@@ -1,0 +1,6 @@
+[submodule "py_tools"]
+	path = py_tools
+	url = https://github.com/KrzysztofOle/PY_TOOLS.git
+	branch = main
+[submodule]
+	active = .
