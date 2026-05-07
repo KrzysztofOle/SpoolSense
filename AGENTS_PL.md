@@ -3,9 +3,9 @@ Status: Draft
 
 # AGENTS_PL.md
 
-<small>Ostatnia aktualizacja: 2026-05-07T00:00:00+02:00</small>
+<small>Ostatnia aktualizacja: 2026-05-07T14:03:36+02:00</small>
 
-## Zasady pracy asystenta (AGENTS) – SpoolSense
+## Zasady pracy asystenta (AGENTS_PL) – SpoolSense
 
 ### 0. Informacje ogólne o projekcie
 
@@ -101,16 +101,16 @@ Kod powinien być zgodny z:
    <small>Ostatnia aktualizacja: YYYY-MM-DDThh:mm:ss±hh:mm</small>
    ```
 
-9.  Wszystkie daty podawaj w lokalnej strefie użytkownika.
-11. README.md zawiera szczegóły techniczne projektu — nie duplikuj ich w innych dokumentach.
-12. Kod i dokumentacja muszą być utrzymywane zgodnie z najlepszymi praktykami inżynierii oprogramowania.
-13. Preferowana jest architektura modularna i łatwa do dalszej rozbudowy.
-14. Kod firmware należy pisać zgodnie z praktykami dla:
+9. Wszystkie daty podawaj w czasie środkowoeuropejskim obowiązującym w projekcie (`Europe/Warsaw`, `CET/CEST`), chyba że dokument wymaga innej strefy.
+10. `README.md` zawiera szczegóły techniczne projektu. Nie duplikuj ich w innych dokumentach, chyba że dany plik jest tłumaczeniem albo skróconym omówieniem.
+11. Kod i dokumentacja muszą być utrzymywane zgodnie z najlepszymi praktykami inżynierii oprogramowania.
+12. Preferowana jest architektura modularna i łatwa do dalszej rozbudowy.
+13. Kod firmware należy pisać zgodnie z praktykami dla:
     - embedded C++
     - Arduino Framework
     - ESP32
     - PlatformIO
-15. Projektować kod z myślą o przyszłej migracji do ESP-IDF.
+14. Projektować kod z myślą o przyszłej migracji do ESP-IDF.
 
 ---
 
@@ -161,11 +161,11 @@ CODEX:
 
 ### Standard commitów
 
-Projekt wykorzystuje standard:
+Projekt wymaga stosowania standardu:
 
 - Conventional Commits
 
-Preferowany format:
+Format:
 
 ```text
 type(scope): short description
@@ -209,8 +209,6 @@ chore(ci): update PlatformIO configuration
    - łatwy do review
 
 2. Jeden commit powinien realizować:
-   - jedną funkcjonalność
-   - jedną poprawkę
    - jedną logiczną zmianę
 
 3. Nie mieszaj w jednym commitcie:
@@ -241,7 +239,7 @@ chore(ci): update PlatformIO configuration
    - `.reports/junit.xml`
    - `.reports/tests.html`
 
-10. Commity dokumentacyjne (`*.md`) mogą posiadać uproszczony opis.
+10. Commity dokumentacyjne (`*.md`) mogą posiadać uproszczony opis, jeśli zakres zmiany jest jednoznacznie dokumentacyjny.
 
 ---
 
@@ -280,7 +278,7 @@ README.md aktualizuj wyłącznie przy:
 
 Nie aktualizuj README dla:
 
-- drobnych zmian UI
+- drobnych zmian prezentacyjnych
 - kosmetycznych refaktoryzacji
 - lokalnych testów
 
@@ -288,11 +286,11 @@ Nie aktualizuj README dla:
 
 ## 7. Testowanie kodu
 
-1. Nowe funkcje muszą posiadać testy.
+1. Nowe funkcje muszą posiadać testy, o ile testowalność jest technicznie możliwa.
 2. Po każdej zmianie uruchamiaj odpowiedni zestaw testów.
 3. Nie proponuj kolejnych zmian przy niezaliczonych testach.
 4. Testy długotrwałe wymagają zgody użytkownika.
-5. Nie twórz sztucznych atrap sprzętu.
+5. Preferuj realny hardware, a gdy nie jest dostępny stosuj lekkie test doubles: stuby, fake'i lub symulatory interfejsów. Pełne mocki hardware stosuj tylko wtedy, gdy są potrzebne do weryfikacji logiki wyższej warstwy.
 6. Testy sprzętowe mogą być pomijane przy braku dostępu do hardware.
 7. Artefakty testowe zapisuj w:
 
@@ -307,7 +305,7 @@ Nie aktualizuj README dla:
    - komunikację I2C/SPI/UART
    - stabilność inicjalizacji urządzeń
   
-9.  Nie zastępuj testów sprzętowych pełnymi mockami hardware bez wyraźnej potrzeby.
+9. Nie zastępuj testów sprzętowych pełnymi mockami hardware, jeśli można wykonać test na realnym urządzeniu lub na lżejszym teście zastępczym.
 
 ---
 
@@ -356,10 +354,13 @@ Kod musi przechodzić:
 
 1. ASCII-only w kodzie źródłowym.
 2. Include wyłącznie na początku pliku.
-3. Nazwy:
+3. Nazewnictwo stosuj zgodnie z konwencją C++:
 
    ```text
-   lower_snake_case
+   pliki, funkcje, zmienne lokalne: lower_snake_case
+   klasy i struktury: PascalCase
+   typy enum class: PascalCase
+   stałe: kCamelCase lub UPPER_SNAKE_CASE, zgodnie z lokalnym stylem modułu
    ```
 
 4. Zachowuj zgodność z:
@@ -367,11 +368,7 @@ Kod musi przechodzić:
    - modularnością projektu
 5. Jedna pusta linia na końcu pliku.
 6. Brak trailing whitespace.
-7. Nieużywane zmienne oznaczaj prefiksem:
-
-   ```cpp
-   _
-   ```
+7. Nieużywane zmienne i parametry oznaczaj preferencyjnie atrybutem `[[maybe_unused]]`. Jeśli to nie wystarcza, użyj jawnego rzutowania na `void`.
 
 ---
 
@@ -410,7 +407,7 @@ Kod musi przechodzić:
 
 ## 10. Header modułów C++
 
-Każdy moduł `.cpp` oraz `.hpp` powinien rozpoczynać się nagłówkiem komentarza.
+Każdy moduł `.cpp` oraz `.hpp` utrzymywany ręcznie powinien rozpoczynać się nagłówkiem komentarza.
 
 ### Wymagana struktura
 
@@ -427,6 +424,12 @@ Każdy moduł `.cpp` oraz `.hpp` powinien rozpoczynać się nagłówkiem komenta
  * File: relative/path.cpp
  */
 ```
+
+Wyjątki:
+
+- pliki generowane automatycznie
+- bardzo małe pliki testowe, jeśli nagłówek obniża czytelność
+- techniczne shimy i adaptery, jeżeli są jedynie przelotnym elementem eksperymentalnym
 
 ---
 
@@ -457,36 +460,33 @@ Każdy moduł `.cpp` oraz `.hpp` powinien rozpoczynać się nagłówkiem komenta
 
 Dokumentacja projektu dzieli się na:
 
-| Dokument  | Przeznaczenie                |
-|-----------|------------------------------|
-| README.md | szczegóły techniczne         |
-| AGENTS.md | zasady współpracy i workflow |
+| Dokument      | Przeznaczenie                |
+|---------------|------------------------------|
+| README.md     | szczegóły techniczne         |
+| AGENTS.md     | wersja referencyjna          |
+| AGENTS_PL.md  | wersja robocza               |
 
 ---
 
 ## 13.1 Język dokumentacji
 
-Podstawowym językiem dokumentacji projektu jest:
+Na etapie roboczym podstawowym językiem tego dokumentu jest:
 
-- język angielski
+- język polski
 
-Dokumentacja techniczna powinna być tworzona przede wszystkim w wersji angielskiej.
-
-Wyjątki:
-
-- wybrane dokumenty mogą posiadać polskie tłumaczenie
+Wersja angielska jest wersją referencyjną.
 
 Konwencja nazewnictwa:
 
-| Typ                    | Przykład       |
-|------------------------|----------------|
-| wersja podstawowa (EN) | `README.md`    |
-| wersja polska.         | `README_PL.md` |
+| Typ                      | Przykład       |
+|--------------------------|----------------|
+| wersja referencyjna (EN) | `AGENTS.md`    |
+| wersja robocza (PL)      | `AGENTS_PL.md` |
 
 Zasady:
 
 1. Wersja angielska jest źródłem referencyjnym.
-2. Wersje `_PL.md` są tłumaczeniem dokumentacji podstawowej.
+2. Wersja polska pozostaje wersją roboczą i bazą do dopracowania treści.
 3. Dokumentacja techniczna API, architektury i firmware powinna być tworzona w języku angielskim.
 4. Dokumentacja użytkowa może posiadać wersje wielojęzyczne.
 
