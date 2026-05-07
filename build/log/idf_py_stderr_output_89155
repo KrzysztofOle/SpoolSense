@@ -1,0 +1,26 @@
+CMake Error at /Users/krzysztof/esp/esp-idf/tools/cmake/build.cmake:540 (message):
+  WARNING: Component "idf" not found
+
+  WARNING: Component "idf" not found
+
+  WARNING: Component "idf" not found
+
+  WARNING: Component "idf" not found
+
+  WARNING: Component "idf" not found
+
+  WARNING: Component "idf" not found
+
+  ERROR: Because no versions of espressif/arduino-esp32 match >3.3.8,<4.0.0
+
+   and espressif/arduino-esp32 (3.3.8) depends on idf (>=5.3,<5.6), espressif/arduino-esp32 (>=3.3.8,<4.0.0) requires idf (>=5.3,<5.6).
+
+  So, because no versions of idf match >=5.3,<5.6
+
+   and project depends on espressif/arduino-esp32 (^3.3.8), version solving failed.
+
+Call Stack (most recent call first):
+  /Users/krzysztof/esp/esp-idf/tools/cmake/project.cmake:547 (idf_build_process)
+  CMakeLists.txt:4 (project)
+
+
