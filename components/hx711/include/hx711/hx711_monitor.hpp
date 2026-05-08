@@ -23,8 +23,11 @@ class Hx711Monitor {
 
   void begin();
   bool is_ready();
+  bool zero(byte times = 8);
   bool read_raw(long *raw_value);
 
  private:
   HX711 scale_;
+  long zero_offset_;
+  bool zeroed_;
 };

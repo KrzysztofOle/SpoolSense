@@ -53,11 +53,22 @@ struct WeightEvent {
     kNotFound,
     kReady,
     kSample,
+    kZeroed,
   };
 
   Kind kind = Kind::kNotFound;
   bool has_sample = false;
   long raw_value = 0;
+  int32_t weight_grams = 0;
+  uint32_t timestamp_ms = 0;
+};
+
+struct Hx711Command {
+  enum class Kind : uint8_t {
+    kZero,
+  };
+
+  Kind kind = Kind::kZero;
   uint32_t timestamp_ms = 0;
 };
 

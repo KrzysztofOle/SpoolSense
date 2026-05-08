@@ -125,4 +125,16 @@ void log_raw_weight(long raw_value) {
   Serial.print("HX711 raw: ");
   Serial.println(raw_value);
 }
+
+void log_weight_grams(long raw_value, int32_t weight_grams) {
+  Serial.print("HX711 raw: ");
+  Serial.print(raw_value);
+  Serial.print(" weight: ");
+  Serial.print(static_cast<long>(weight_grams));
+  Serial.println(" g");
+}
+
+void log_hx711_zeroed() {
+  Serial.println("HX711 zeroed");
+}
 }  // namespace diagnostics

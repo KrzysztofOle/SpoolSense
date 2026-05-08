@@ -16,6 +16,7 @@
 
 #include <Arduino.h>
 #include <M5Unified.h>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -35,6 +36,9 @@ constexpr uint32_t kRfidInitRetryMs = 1500;
 constexpr uint16_t kRfidReadTimeoutMs = 50;
 constexpr uint32_t kHx711SampleIntervalMs = 700;
 constexpr uint32_t kHx711InitRetryMs = 1500;
+constexpr uint32_t kHx711ZeroSamples = 8;
+constexpr uint32_t kHx711MissingTimeoutMs = 500;
+constexpr float kHx711CountsPerGram = 1000.0f;
 constexpr uint32_t kDiagnosticsIntervalMs = 5000;
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
 
@@ -48,6 +52,10 @@ bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
 
 void clear_uid(uint8_t *uid) {
   std::memset(uid, 0, kMaxRfidUidLength);
+}
+
+int32_t raw_to_grams(long raw_value) {
+  return static_cast<int32_t>(std::lround(static_cast<double>(raw_value) / kHx711CountsPerGram));
 }
 
 UiState to_ui_state(const AppState &state) {
@@ -65,8 +73,11 @@ UiState to_ui_state(const AppState &state) {
   ui_state.rfid_usage_seconds = state.rfid_usage_seconds;
   ui_state.rfid_life_percent = state.rfid_life_percent;
   ui_state.hx711_raw_value = state.hx711_raw_value;
+  ui_state.hx711_weight_grams = state.hx711_weight_grams;
   ui_state.rfid_last_change_ms = state.rfid_last_change_ms;
   ui_state.hx711_last_sample_ms = state.hx711_last_sample_ms;
+  ui_state.hx711_zeroed = state.hx711_zeroed;
+  ui_state.hx711_zeroed_ms = state.hx711_zeroed_ms;
   ui_state.last_button = state.last_button;
   ui_state.last_button_ms = state.last_button_ms;
   if (state.rfid_has_uid) {
@@ -87,8 +98,11 @@ bool same_state(const UiState &lhs, const UiState &rhs) {
          lhs.rfid_usage_seconds == rhs.rfid_usage_seconds &&
          lhs.rfid_life_percent == rhs.rfid_life_percent &&
          lhs.hx711_raw_value == rhs.hx711_raw_value &&
+         lhs.hx711_weight_grams == rhs.hx711_weight_grams &&
          lhs.rfid_last_change_ms == rhs.rfid_last_change_ms &&
          lhs.hx711_last_sample_ms == rhs.hx711_last_sample_ms &&
+         lhs.hx711_zeroed == rhs.hx711_zeroed &&
+         lhs.hx711_zeroed_ms == rhs.hx711_zeroed_ms &&
          lhs.last_button == rhs.last_button &&
          lhs.last_button_ms == rhs.last_button_ms &&
          std::memcmp(lhs.rfid_uid, rhs.rfid_uid, sizeof(lhs.rfid_uid)) == 0;
@@ -255,12 +269,16 @@ void log_weight_event_effects(const AppState &before_state, const AppState &afte
 
     case WeightEvent::Kind::kSample:
       if (event.has_sample) {
-        diagnostics::log_raw_weight(event.raw_value);
+        diagnostics::log_weight_grams(event.raw_value, event.weight_grams);
       }
       if (after_state.current_mode == AppMode::kError && before_state.current_mode != AppMode::kError &&
           before_state.rfid_status != RfidStatus::kBooting) {
         diagnostics::log_line("Sensor fault");
       }
+      break;
+
+    case WeightEvent::Kind::kZeroed:
+      diagnostics::log_hx711_zeroed();
       break;
   }
 
@@ -278,7 +296,11 @@ void render_developer_screen(const UiState &state) {
   std::snprintf(line3, sizeof(line3), "%s", hx711_status_text(state.hx711_status));
 
   char line4[96] = {};
-  if (state.rfid_has_uid) {
+  if (state.hx711_has_sample) {
+    std::snprintf(line4, sizeof(line4), "Weight: %ld g", static_cast<long>(state.hx711_weight_grams));
+  } else if (state.hx711_zeroed) {
+    std::snprintf(line4, sizeof(line4), "HX711 zeroed");
+  } else if (state.rfid_has_uid) {
     char uid_line[48] = {};
     diagnostics::format_uid(state.rfid_uid, state.rfid_uid_length, uid_line, sizeof(uid_line));
     size_t used = 0;
@@ -354,9 +376,17 @@ void App::start_tasks() {
   } else {
     xQueueReset(weight_event_queue_);
   }
+  if (hx711_command_queue_ == nullptr) {
+    hx711_command_queue_ = xQueueCreate(kHx711CommandQueueLength, sizeof(Hx711Command));
+  } else {
+    xQueueReset(hx711_command_queue_);
+  }
 #else
   if (weight_event_queue_ != nullptr) {
     xQueueReset(weight_event_queue_);
+  }
+  if (hx711_command_queue_ != nullptr) {
+    xQueueReset(hx711_command_queue_);
   }
 #endif
 
@@ -375,6 +405,11 @@ void App::start_tasks() {
 #if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
   if (weight_event_queue_ == nullptr) {
     diagnostics::log_line("HX711 queue allocation failed");
+    stop_tasks();
+    return;
+  }
+  if (hx711_command_queue_ == nullptr) {
+    diagnostics::log_line("HX711 command queue allocation failed");
     stop_tasks();
     return;
   }
@@ -450,6 +485,10 @@ void App::stop_tasks() {
     vTaskDelete(diagnostics_task_handle_);
     diagnostics_task_handle_ = nullptr;
   }
+
+  if (hx711_command_queue_ != nullptr) {
+    xQueueReset(hx711_command_queue_);
+  }
 }
 
 void App::reset_state() {
@@ -520,6 +559,14 @@ bool App::publish_weight_event(const WeightEvent &event) {
   return xQueueSendToBack(weight_event_queue_, &event, 0) == pdTRUE;
 }
 
+bool App::publish_hx711_command(const Hx711Command &command) {
+  if (hx711_command_queue_ == nullptr) {
+    return false;
+  }
+
+  return xQueueSendToBack(hx711_command_queue_, &command, 0) == pdTRUE;
+}
+
 bool App::receive_rfid_event(RfidEvent *event) {
   if (event == nullptr || rfid_event_queue_ == nullptr) {
     return false;
@@ -534,6 +581,14 @@ bool App::receive_weight_event(WeightEvent *event) {
   }
 
   return xQueueReceive(weight_event_queue_, event, 0) == pdTRUE;
+}
+
+bool App::receive_hx711_command(Hx711Command *command) {
+  if (command == nullptr || hx711_command_queue_ == nullptr) {
+    return false;
+  }
+
+  return xQueueReceive(hx711_command_queue_, command, 0) == pdTRUE;
 }
 
 bool App::ui_state_changed(const UiState &lhs, const UiState &rhs) const {
@@ -565,6 +620,15 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
     const AppState before_state = state;
     fsm_.handle_event(state, event);
     log_button_event_effects(state, event);
+
+    if (button_event.kind == ButtonKind::kA && state.hx711_enabled) {
+      Hx711Command command{};
+      command.kind = Hx711Command::Kind::kZero;
+      command.timestamp_ms = now;
+      if (!publish_hx711_command(command)) {
+        diagnostics::log_line("HX711 zero request dropped");
+      }
+    }
 
     if (before_state.last_button != state.last_button || before_state.last_button_ms != state.last_button_ms) {
       handled_event = true;
@@ -772,13 +836,31 @@ void App::hx711_task_loop() {
   uint32_t next_init_retry_at_ms = 0;
   uint32_t next_sample_at_ms = 0;
   bool ready_reported = false;
+  bool zero_pending = false;
+  uint32_t missing_since_ms = 0;
 
   monitor.begin();
 
   for (;;) {
     const uint32_t now = millis();
 
+    Hx711Command command{};
+    while (receive_hx711_command(&command)) {
+      if (command.kind == Hx711Command::Kind::kZero) {
+        zero_pending = true;
+      }
+    }
+
     if (!monitor.is_ready()) {
+      if (missing_since_ms == 0) {
+        missing_since_ms = now;
+      }
+
+      if (now - missing_since_ms < kHx711MissingTimeoutMs) {
+        vTaskDelay(pdMS_TO_TICKS(25));
+        continue;
+      }
+
       if (now < next_init_retry_at_ms) {
         vTaskDelay(pdMS_TO_TICKS(25));
         continue;
@@ -792,20 +874,47 @@ void App::hx711_task_loop() {
       }
 
       ready_reported = false;
+      missing_since_ms = 0;
+      next_sample_at_ms = 0;
       next_init_retry_at_ms = now + kHx711InitRetryMs;
       vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
 
-    if (!ready_reported) {
+    if (!ready_reported || zero_pending) {
+      if (!monitor.zero(kHx711ZeroSamples)) {
+        if (missing_since_ms == 0) {
+          missing_since_ms = now;
+        }
+
+        if (now - missing_since_ms >= kHx711MissingTimeoutMs) {
+          WeightEvent event{};
+          event.kind = WeightEvent::Kind::kNotFound;
+          event.timestamp_ms = now;
+          if (!publish_weight_event(event)) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+          }
+          ready_reported = false;
+          missing_since_ms = 0;
+          next_init_retry_at_ms = now + kHx711InitRetryMs;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+        continue;
+      }
+
       WeightEvent event{};
-      event.kind = WeightEvent::Kind::kReady;
+      event.kind = zero_pending ? WeightEvent::Kind::kZeroed : WeightEvent::Kind::kReady;
       event.timestamp_ms = now;
       if (!publish_weight_event(event)) {
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       ready_reported = true;
-      next_sample_at_ms = now;
+      missing_since_ms = 0;
+      zero_pending = false;
+      next_sample_at_ms = now + kHx711SampleIntervalMs;
+      vTaskDelay(pdMS_TO_TICKS(50));
+      continue;
     }
 
     if (now < next_sample_at_ms) {
@@ -819,16 +928,27 @@ void App::hx711_task_loop() {
 
     long raw_value = 0;
     if (monitor.read_raw(&raw_value)) {
+      missing_since_ms = 0;
       WeightEvent event{};
       event.kind = WeightEvent::Kind::kSample;
       event.has_sample = true;
       event.raw_value = raw_value;
+      event.weight_grams = raw_to_grams(raw_value);
       event.timestamp_ms = now;
       if (!publish_weight_event(event)) {
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       next_sample_at_ms = now + kHx711SampleIntervalMs;
     } else {
+      if (missing_since_ms == 0) {
+        missing_since_ms = now;
+      }
+
+      if (now - missing_since_ms < kHx711MissingTimeoutMs) {
+        vTaskDelay(pdMS_TO_TICKS(25));
+        continue;
+      }
+
       WeightEvent event{};
       event.kind = WeightEvent::Kind::kNotFound;
       event.timestamp_ms = now;
@@ -836,6 +956,9 @@ void App::hx711_task_loop() {
         vTaskDelay(pdMS_TO_TICKS(50));
       }
       ready_reported = false;
+      zero_pending = false;
+      missing_since_ms = 0;
+      next_sample_at_ms = 0;
       next_init_retry_at_ms = now + kHx711InitRetryMs;
     }
 

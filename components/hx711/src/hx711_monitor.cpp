@@ -18,14 +18,26 @@
 
 #include "board/board.hpp"
 
-Hx711Monitor::Hx711Monitor() = default;
+Hx711Monitor::Hx711Monitor() : zero_offset_(0), zeroed_(false) {}
 
 void Hx711Monitor::begin() {
   scale_.begin(board::kHx711DoutPin, board::kHx711SckPin);
+  zero_offset_ = 0;
+  zeroed_ = false;
 }
 
 bool Hx711Monitor::is_ready() {
   return scale_.is_ready();
+}
+
+bool Hx711Monitor::zero(byte times) {
+  if (times == 0 || !scale_.is_ready()) {
+    return false;
+  }
+
+  zero_offset_ = scale_.read_average(times);
+  zeroed_ = true;
+  return true;
 }
 
 bool Hx711Monitor::read_raw(long *raw_value) {
@@ -33,6 +45,7 @@ bool Hx711Monitor::read_raw(long *raw_value) {
     return false;
   }
 
-  *raw_value = scale_.read();
+  const long raw_value_unadjusted = scale_.read();
+  *raw_value = zeroed_ ? raw_value_unadjusted - zero_offset_ : raw_value_unadjusted;
   return true;
 }

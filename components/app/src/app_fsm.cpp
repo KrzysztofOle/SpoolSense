@@ -42,8 +42,10 @@ void AppFsm::reset(AppState &state, uint32_t now_ms) const {
   state.hx711_enabled = false;
   state.hx711_status = Hx711Status::kDisabled;
 #endif
+  state.hx711_zeroed = false;
   state.rfid_last_change_ms = now_ms;
   state.hx711_last_sample_ms = now_ms;
+  state.hx711_zeroed_ms = now_ms;
 }
 
 bool AppFsm::transition_to(AppState &state, AppMode next_mode) {
@@ -173,12 +175,14 @@ bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
     case WeightEvent::Kind::kNotFound:
       state.hx711_status = Hx711Status::kNotFound;
       state.hx711_has_sample = false;
+      state.hx711_zeroed = false;
       (void)transition_to(state, AppMode::kError);
       return true;
 
     case WeightEvent::Kind::kReady:
       state.hx711_status = Hx711Status::kReady;
       state.hx711_has_sample = false;
+      state.hx711_zeroed = false;
       sync_mode(state);
       return true;
 
@@ -186,6 +190,18 @@ bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
       state.hx711_status = Hx711Status::kReady;
       state.hx711_has_sample = event.has_sample;
       state.hx711_raw_value = event.raw_value;
+      state.hx711_weight_grams = event.weight_grams;
+      state.hx711_zeroed = false;
+      sync_mode(state);
+      return true;
+
+    case WeightEvent::Kind::kZeroed:
+      state.hx711_status = Hx711Status::kReady;
+      state.hx711_has_sample = false;
+      state.hx711_raw_value = 0;
+      state.hx711_weight_grams = 0;
+      state.hx711_zeroed = true;
+      state.hx711_zeroed_ms = event.timestamp_ms;
       sync_mode(state);
       return true;
   }

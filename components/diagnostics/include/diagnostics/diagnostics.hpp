@@ -29,4 +29,6 @@ void log_uid_and_type(const uint8_t *uid, uint8_t uid_length);
 void log_uid_and_usage(const uint8_t *uid, uint8_t uid_length, const uint8_t *page_data,
                        uint32_t usage_seconds, uint8_t life_percent);
 void log_raw_weight(long raw_value);
+void log_weight_grams(long raw_value, int32_t weight_grams);
+void log_hx711_zeroed();
 }  // namespace diagnostics

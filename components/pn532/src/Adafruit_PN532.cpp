@@ -59,6 +59,12 @@
 
 #include "Adafruit_PN532.h"
 
+#include <cstdint>
+
+namespace {
+constexpr uint8_t kInvalidPin = UINT8_MAX;
+}
+
 byte pn532ack[] = {0x00, 0x00, 0xFF,
                    0x00, 0xFF, 0x00}; ///< ACK message from PN532
 byte pn532response_firmwarevers[] = {
@@ -107,8 +113,12 @@ Adafruit_PN532::Adafruit_PN532(uint8_t clk, uint8_t miso, uint8_t mosi,
 /**************************************************************************/
 Adafruit_PN532::Adafruit_PN532(uint8_t irq, uint8_t reset, TwoWire *theWire)
     : _irq(irq), _reset(reset) {
-  pinMode(_irq, INPUT);
-  pinMode(_reset, OUTPUT);
+  if (irq != kInvalidPin) {
+    pinMode(_irq, INPUT);
+  }
+  if (reset != kInvalidPin) {
+    pinMode(_reset, OUTPUT);
+  }
   i2c_dev = new Adafruit_I2CDevice(PN532_I2C_ADDRESS, theWire);
 }
 
@@ -136,7 +146,9 @@ Adafruit_PN532::Adafruit_PN532(uint8_t ss, SPIClass *theSPI) {
 /**************************************************************************/
 Adafruit_PN532::Adafruit_PN532(uint8_t reset, HardwareSerial *theSer)
     : _reset(reset) {
-  pinMode(_reset, OUTPUT);
+  if (reset != kInvalidPin) {
+    pinMode(_reset, OUTPUT);
+  }
   ser_dev = theSer;
 }
 
