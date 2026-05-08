@@ -1,11 +1,14 @@
 {
+    // See http://go.microsoft.com/fwlink/?LinkId=827846
+    // for the documentation about the extensions.json format
     "recommendations": [
         "espressif.esp-idf-extension",
+        "ms-vscode.cmake-tools",
         "ms-vscode.cpptools",
-        "ms-vscode.cmake-tools"
+        "platformio.platformio-ide"
     ],
     "unwantedRecommendations": [
-        "platformio.platformio-ide",
-        "ms-vscode.cpptools-extension-pack"
+        "ms-vscode.cpptools-extension-pack",
+        "platformio.platformio-ide"
     ]
 }

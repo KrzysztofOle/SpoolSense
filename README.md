@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-07T22:23:28+02:00</small>
+<small>Last updated: 2026-05-08T23:11:46+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -74,7 +74,7 @@ After the ESP-IDF migration, the same task split remains the execution model for
 #### HX711
 
 - `DOUT` -> `GPIO16`
-- `SCK` -> `GPIO4`
+- `SCK` -> `GPIO17`
 - `VCC` -> `3.3V`
 - `GND` -> `GND`
 

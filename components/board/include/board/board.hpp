@@ -24,7 +24,7 @@ constexpr uint8_t kPn532SclPin = 22;
 constexpr uint8_t kPn532IrqPin = 255;
 constexpr uint8_t kPn532ResetPin = 255;
 constexpr uint8_t kHx711DoutPin = 16;
-constexpr uint8_t kHx711SckPin = 4;
+constexpr uint8_t kHx711SckPin = 17;
 
 void begin_pn532_wire();
 void begin_i2c_mutex();
