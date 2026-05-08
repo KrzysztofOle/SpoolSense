@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-08T23:11:46+02:00</small>
+<small>Last updated: 2026-05-08T23:43:37+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -64,6 +64,8 @@ The current developer flow also reads the three M5Stack buttons in the App Task:
 - BtnB
 - BtnC
 
+`BtnA` zeroes the HX711 baseline at runtime and the UI shows the current weight estimate in grams after the initial tare.
+
 The App Task is the single owner of mutable application state, evaluates FSM transitions, and aggregates sensor data before the UI renders it. `UiState` carries the current `AppMode`, so the display can react to Boot, Idle, TagDetected, Measuring, Error, and Calibration states.
 When HX711 is disabled, the runtime stays in RFID/UI mode and does not treat the missing weight sensor as a fatal fault.
 
@@ -97,7 +99,8 @@ Expected messages:
 - `HX711 disabled` when the subsystem is turned off in config
 - `HX711 init OK`
 - `HX711 not found`
-- weight readings printed periodically over `Serial`
+- weight readings printed periodically over `Serial` together with the estimated grams
+- `BtnA clicked` followed by `HX711 zeroed` when the HX711 baseline is reset at runtime
 - `PN532 init OK`
 - `PN532 not found`
 - RFID UID printed when a tag is presented

@@ -3,17 +3,17 @@ Status: Draft
 
 # AGENTS_PL.md
 
-<small>Ostatnia aktualizacja: 2026-05-07T14:03:36+02:00</small>
+<small>Ostatnia aktualizacja: 2026-05-08T23:23:44+02:00</small>
 
 ## Zasady pracy asystenta (AGENTS_PL) – SpoolSense
 
 ### 0. Informacje ogólne o projekcie
 
 - Nazwa projektu: SpoolSense
-- Główna technologia / język: C++ / Arduino Framework
-- Środowisko docelowe: ESP32 / M5Stack Core ESP32 / PlatformIO
-- Repozytorium / struktura kodu: Firmware embedded oparty o PlatformIO + dokumentacja Markdown
-- Ostatnia aktualizacja zasad: 2026-05-07
+- Główna technologia / język: C++ / ESP-IDF
+- Środowisko docelowe: ESP32 / M5Stack Core ESP32 / ESP-IDF
+- Repozytorium / struktura kodu: Firmware embedded oparty o ESP-IDF + dokumentacja Markdown
+- Ostatnia aktualizacja zasad: 2026-05-08
 
 Dokument opisuje współpracę przy projekcie „SpoolSense”.
 
@@ -30,30 +30,26 @@ README.md
 Projekt rozwijany jest obecnie w:
 
 - języku `C++`
-- frameworku `Arduino`
-- środowisku `PlatformIO`
+- `ESP-IDF`
+- warstwach zgodności `Arduino` tam, gdzie wymagają tego konkretne komponenty
 
 Potwierdzenie konfiguracji projektu:
 
-- `platformio.ini`
-  - `framework = arduino`
-  - `board = m5stack-core-esp32`
-- firmware znajduje się w:
-  - `src/main.cpp`
-  - `src/rfid_test.cpp`
+- `CMakeLists.txt`
+- `main/CMakeLists.txt`
+- manifesty i pliki build dla komponentów w `components/*/CMakeLists.txt`
+- konfiguracja bazowa:
+  - `sdkconfig.defaults`
+- punkt wejścia firmware:
+  - `main/src/main.cpp`
 - dokumentacja projektu:
   - `README.md`
 
 Projekt jest obecnie rozwijany w oparciu o:
 
-- `Arduino Framework`
-- `PlatformIO`
-
-Docelowym kierunkiem rozwoju projektu jest migracja do:
-
 - `ESP-IDF`
 
-Architektura kodu powinna być projektowana w sposób umożliwiający możliwie bezproblemowe przejście z Arduino Framework do natywnego środowiska ESP-IDF.
+Architektura kodu powinna pozostawać zgodna z natywnym środowiskiem ESP-IDF, przy jednoczesnym izolowaniu zależności od Arduino.
 
 Należy:
 
@@ -66,8 +62,8 @@ Kod powinien być zgodny z:
 
 - dobrymi praktykami embedded C++
 - architekturą modularną
-- ograniczeniami środowiska Arduino/ESP32
-- wymaganiami PlatformIO
+- ograniczeniami środowiska ESP32 / ESP-IDF
+- lokalnymi wymaganiami projektu ESP-IDF
 
 ---
 
@@ -107,10 +103,9 @@ Kod powinien być zgodny z:
 12. Preferowana jest architektura modularna i łatwa do dalszej rozbudowy.
 13. Kod firmware należy pisać zgodnie z praktykami dla:
     - embedded C++
-    - Arduino Framework
+    - ESP-IDF
     - ESP32
-    - PlatformIO
-14. Projektować kod z myślą o przyszłej migracji do ESP-IDF.
+14. Projektować kod tak, aby pozostawał zgodny z natywną architekturą ESP-IDF i izolował kod zależny od Arduino.
 
 ---
 
@@ -179,7 +174,7 @@ fix(hx711): prevent unstable weight readings
 refactor(core): split hardware abstraction layer
 docs(readme): update wiring section
 test(rfid): add hardware initialization tests
-chore(ci): update PlatformIO configuration
+chore(ci): update ESP-IDF configuration
 ```
 
 ---
@@ -508,4 +503,4 @@ Rozdzielenie odpowiedzialności pomiędzy ChatGPT i CODEX ma zapewnić:
 - łatwiejsze utrzymanie projektu
 - większą przewidywalność procesu rozwoju
 
-Projekt należy traktować jako firmware embedded rozwijany obecnie w środowisku Arduino Framework na platformie ESP32 z wykorzystaniem PlatformIO, z docelową migracją do natywnego środowiska ESP-IDF.
+Projekt należy traktować jako firmware embedded rozwijany obecnie w środowisku ESP-IDF na platformie ESP32, z izolowanymi warstwami zgodności Arduino tam, gdzie to potrzebne.

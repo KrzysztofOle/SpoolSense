@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-08T23:11:46+02:00</small>
+<small>Last updated: 2026-05-08T23:43:37+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -64,6 +64,8 @@ Aktualny tryb developerski odczytuje też trzy przyciski M5Stack w App Task:
 - BtnB
 - BtnC
 
+`BtnA` zeruje bazę HX711 w czasie pracy, a interfejs pokazuje aktualne oszacowanie wagi w gramach po początkowym tarowaniu.
+
 App Task jest jedynym właścicielem mutowalnego stanu aplikacji, wykonuje logikę FSM i agreguje dane sensorów przed renderowaniem UI. `UiState` przenosi aktualny `AppMode`, więc wyświetlacz może reagować na stany Boot, Idle, TagDetected, Measuring, Error i Calibration.
 Gdy HX711 jest wyłączony, runtime pozostaje w trybie RFID/UI i brak czujnika wagi nie jest traktowany jako błąd krytyczny.
 
@@ -97,7 +99,8 @@ Oczekiwane komunikaty:
 - `HX711 disabled`, gdy podsystem jest wyłączony w konfiguracji
 - `HX711 init OK`
 - `HX711 not found`
-- odczyty wagi wypisywane cyklicznie przez `Serial`
+- odczyty wagi wypisywane cyklicznie przez `Serial` razem z oszacowaną wagą w gramach
+- `BtnA clicked` oraz `HX711 zeroed`, gdy baza HX711 zostanie zresetowana w czasie pracy
 - `PN532 init OK`
 - `PN532 not found`
 - UID karty RFID wypisywany po zbliżeniu tagu
