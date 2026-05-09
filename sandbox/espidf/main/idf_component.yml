@@ -1,5 +1,9 @@
 dependencies:
   espressif/arduino-esp32:
     version: "^3.0.7"
+  M5GFX:
+    git: https://github.com/m5stack/M5GFX.git
+    version: 0.2.19
   m5stack/m5unified:
-    version: "^0.2.7"
+    git: https://github.com/m5stack/M5Unified.git
+    version: 002b75f

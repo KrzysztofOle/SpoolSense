@@ -26,10 +26,10 @@ extern "C" void app_main(void) {
   cfg.fallback_board = m5::board_t::board_M5Stack;
   cfg.serial_baudrate = 115200;
   M5.begin(cfg);
+  M5.Display.setBrightness(255);
 
   M5.Display.setTextSize(3);
-  M5.Display.setTextColor(WHITE, BLACK);
-  M5.Display.fillScreen(BLACK);
+  M5.Display.setTextColor(WHITE);
   M5.Display.setCursor(20, 32);
   M5.Display.println("Halo World");
   M5.Display.setCursor(20, 72);
