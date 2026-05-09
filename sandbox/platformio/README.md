@@ -1,6 +1,6 @@
 # Sandbox PlatformIO App
 
-<small>Last updated: 2026-05-09T15:18:11+02:00</small>
+<small>Last updated: 2026-05-09T15:25:07+02:00</small>
 
 PlatformIO test app for M5Stack Core ESP32.
 
@@ -8,7 +8,8 @@ PlatformIO test app for M5Stack Core ESP32.
 
 - Initializes `M5Unified`
 - Clears the display
-- Shows a simple LCD test screen
+- Shows the application folder name on the display
+- Counts presses on `BtnA`, `BtnB`, and `BtnC`
 
 ## Build
 
@@ -23,4 +24,3 @@ cd sandbox/platformio
 cd sandbox/platformio
 /Users/krzysztof/.platformio/penv/bin/platformio run --target upload
 ```
-
