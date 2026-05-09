@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include <sdkconfig.h>
+#include <nvs_flash.h>
 
 #include "board/board.hpp"
 #include "diagnostics/diagnostics.hpp"
@@ -41,6 +42,17 @@ constexpr uint32_t kHx711MissingTimeoutMs = 500;
 constexpr float kHx711CountsPerGram = 1000.0f;
 constexpr uint32_t kDiagnosticsIntervalMs = 5000;
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
+#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532) && CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532
+constexpr bool kIgnoreMissingPn532 = true;
+#else
+constexpr bool kIgnoreMissingPn532 = false;
+#endif
+
+#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711) && CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711
+constexpr bool kIgnoreMissingHx711 = true;
+#else
+constexpr bool kIgnoreMissingHx711 = false;
+#endif
 
 bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
   if (uid_length == 0) {
@@ -52,6 +64,57 @@ bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
 
 void clear_uid(uint8_t *uid) {
   std::memset(uid, 0, kMaxRfidUidLength);
+}
+
+RfidEvent::Kind missing_rfid_event_kind() {
+  return kIgnoreMissingPn532 ? RfidEvent::Kind::kWaitingForCard : RfidEvent::Kind::kReaderMissing;
+}
+
+bool run_missing_device_self_test() {
+  AppFsm fsm;
+
+  AppState state{};
+  fsm.reset(state, 0);
+
+  const AppMode expected_mode = (kIgnoreMissingPn532 && kIgnoreMissingHx711) ? AppMode::kIdle
+                                                                             : AppMode::kBoot;
+  const bool reset_ok = state.current_mode == expected_mode &&
+                        state.rfid_status ==
+                            (kIgnoreMissingPn532 ? RfidStatus::kWaitingForCard : RfidStatus::kBooting) &&
+                        state.hx711_status ==
+                            (kIgnoreMissingHx711 ? Hx711Status::kDisabled : Hx711Status::kBooting) &&
+                        state.hx711_enabled == !kIgnoreMissingHx711;
+
+  AppState rfid_state = state;
+  RfidEvent rfid_event{};
+  rfid_event.kind = missing_rfid_event_kind();
+  rfid_event.timestamp_ms = 1;
+  const bool rfid_handled = fsm.handle_event(rfid_state, rfid_event);
+  const bool rfid_ok = rfid_handled && rfid_state.rfid_status ==
+                                          (kIgnoreMissingPn532 ? RfidStatus::kWaitingForCard
+                                                               : RfidStatus::kReaderMissing) &&
+                      rfid_state.current_mode ==
+                          (kIgnoreMissingPn532 ? expected_mode : AppMode::kError);
+
+  AppState hx_state{};
+  hx_state.current_mode = AppMode::kIdle;
+  hx_state.rfid_status = RfidStatus::kWaitingForCard;
+  hx_state.hx711_status = Hx711Status::kBooting;
+  hx_state.hx711_enabled = true;
+
+  WeightEvent weight_event{};
+  weight_event.kind = WeightEvent::Kind::kNotFound;
+  weight_event.timestamp_ms = 2;
+  const bool hx_handled = fsm.handle_event(hx_state, weight_event);
+  const bool hx_ok = hx_handled && hx_state.hx711_enabled == !kIgnoreMissingHx711 &&
+                     hx_state.hx711_status ==
+                         (kIgnoreMissingHx711 ? Hx711Status::kDisabled : Hx711Status::kNotFound) &&
+                     hx_state.current_mode ==
+                         (kIgnoreMissingHx711 ? AppMode::kIdle : AppMode::kError);
+
+  const bool passed = reset_ok && rfid_ok && hx_ok;
+  diagnostics::log_line(passed ? "Startup self-test: passed" : "Startup self-test: failed");
+  return passed;
 }
 
 int32_t raw_to_grams(long raw_value) {
@@ -125,6 +188,23 @@ const char *rfid_status_text(RfidStatus status) {
   return "RFID: unknown";
 }
 
+const char *rfid_status_short_text(RfidStatus status) {
+  switch (status) {
+    case RfidStatus::kBooting:
+      return "RFID: boot";
+    case RfidStatus::kReaderMissing:
+      return "RFID: miss";
+    case RfidStatus::kWaitingForCard:
+      return "RFID: wait";
+    case RfidStatus::kCardPresent:
+      return "RFID: card";
+    case RfidStatus::kCardRemoved:
+      return "RFID: gone";
+  }
+
+  return "RFID: ?";
+}
+
 const char *hx711_status_text(Hx711Status status) {
   switch (status) {
     case Hx711Status::kBooting:
@@ -155,6 +235,36 @@ const char *button_text(ButtonKind kind) {
   return "unknown";
 }
 
+const char *button_short_text(ButtonKind kind) {
+  switch (kind) {
+    case ButtonKind::kA:
+      return "BtnA";
+    case ButtonKind::kB:
+      return "BtnB";
+    case ButtonKind::kC:
+      return "BtnC";
+    case ButtonKind::kNone:
+      return "";
+  }
+
+  return "";
+}
+
+const char *hx711_status_short_text(Hx711Status status) {
+  switch (status) {
+    case Hx711Status::kBooting:
+      return "HX: boot";
+    case Hx711Status::kDisabled:
+      return "HX: off";
+    case Hx711Status::kNotFound:
+      return "HX: miss";
+    case Hx711Status::kReady:
+      return "HX: ready";
+  }
+
+  return "HX: ?";
+}
+
 const char *app_mode_text(AppMode mode) {
   switch (mode) {
     case AppMode::kBoot:
@@ -172,6 +282,49 @@ const char *app_mode_text(AppMode mode) {
   }
 
   return "Mode: unknown";
+}
+
+const char *app_mode_short_text(AppMode mode) {
+  switch (mode) {
+    case AppMode::kBoot:
+      return "Mode: boot";
+    case AppMode::kIdle:
+      return "Mode: idle";
+    case AppMode::kTagDetected:
+      return "Mode: tag";
+    case AppMode::kMeasuring:
+      return "Mode: meas";
+    case AppMode::kError:
+      return "Mode: error";
+    case AppMode::kCalibration:
+      return "Mode: calib";
+  }
+
+  return "Mode: ?";
+}
+
+const char *board_text(m5::board_t board) {
+  switch (board) {
+    case m5::board_t::board_M5Stack:
+      return "M5Stack";
+    case m5::board_t::board_M5StackCore2:
+      return "M5Stack Core2";
+    case m5::board_t::board_M5StickC:
+      return "M5StickC";
+    case m5::board_t::board_M5StickCPlus:
+      return "M5StickC Plus";
+    case m5::board_t::board_M5StickCPlus2:
+      return "M5StickC Plus2";
+    default:
+      return "Unknown board";
+  }
+}
+
+void log_board_status(const char *prefix, m5::board_t board) {
+  char line[64] = {};
+  std::snprintf(line, sizeof(line), "%s: %s (%d)", prefix, board_text(board),
+                static_cast<int>(board));
+  diagnostics::log_line(line);
 }
 
 void log_mode_if_changed(AppMode before_mode, AppMode after_mode) {
@@ -198,7 +351,7 @@ void log_button_event_effects(const AppState &after_state, const ButtonEvent &ev
 void log_rfid_event_effects(const AppState &before_state, const AppState &after_state, const RfidEvent &event) {
   switch (event.kind) {
     case RfidEvent::Kind::kReaderMissing:
-      diagnostics::log_line("PN532 not found");
+      diagnostics::log_line(kIgnoreMissingPn532 ? "PN532 missing ignored" : "PN532 not found");
       break;
 
     case RfidEvent::Kind::kReaderReady: {
@@ -256,7 +409,7 @@ void log_weight_event_effects(const AppState &before_state, const AppState &afte
 
   switch (event.kind) {
     case WeightEvent::Kind::kNotFound:
-      diagnostics::log_line("HX711 not found");
+      diagnostics::log_line(kIgnoreMissingHx711 ? "HX711 missing ignored" : "HX711 not found");
       break;
 
     case WeightEvent::Kind::kReady:
@@ -323,6 +476,52 @@ void render_developer_screen(const UiState &state) {
   display::append_line(line4);
 }
 
+void render_compact_screen(const UiState &state) {
+  char line1[32] = {};
+  std::snprintf(line1, sizeof(line1), "%s", app_mode_short_text(state.current_mode));
+
+  char line2[32] = {};
+  if (state.hx711_has_sample) {
+    std::snprintf(line2, sizeof(line2), "W:%ldg", static_cast<long>(state.hx711_weight_grams));
+  } else if (state.hx711_zeroed) {
+    std::snprintf(line2, sizeof(line2), "W: zeroed");
+  } else {
+    std::snprintf(line2, sizeof(line2), "W: --");
+  }
+
+  char line3[32] = {};
+  std::snprintf(line3, sizeof(line3), "%s", rfid_status_short_text(state.rfid_status));
+
+  char line4[32] = {};
+  if (state.last_button != ButtonKind::kNone) {
+    std::snprintf(line4, sizeof(line4), "%s", button_short_text(state.last_button));
+  } else {
+    std::snprintf(line4, sizeof(line4), "%s", hx711_status_short_text(state.hx711_status));
+  }
+
+  display::show_text(line1, line2);
+  display::append_line(line3);
+  display::append_line(line4);
+}
+
+void render_missing_devices_screen(const UiState &state) {
+  char line1[32] = {};
+  std::snprintf(line1, sizeof(line1), "No modules");
+
+  char line2[32] = {};
+  std::snprintf(line2, sizeof(line2), "%s", state.rfid_status == RfidStatus::kWaitingForCard ? "PN532 off" : "PN532 err");
+
+  char line3[32] = {};
+  std::snprintf(line3, sizeof(line3), "%s", state.hx711_status == Hx711Status::kDisabled ? "HX711 off" : "HX711 err");
+
+  char line4[32] = {};
+  std::snprintf(line4, sizeof(line4), "Ready");
+
+  display::show_text(line1, line2);
+  display::append_line(line3);
+  display::append_line(line4);
+}
+
 void log_timeout_effects(const AppState &before_state, const AppState &after_state, uint32_t now_ms) {
   if (after_state.current_mode == before_state.current_mode) {
     return;
@@ -340,6 +539,17 @@ void log_timeout_effects(const AppState &before_state, const AppState &after_sta
 }
 
 void render_state(const UiState &state) {
+  if (kIgnoreMissingPn532 && kIgnoreMissingHx711 && state.current_mode == AppMode::kIdle &&
+      state.rfid_status == RfidStatus::kWaitingForCard && state.hx711_status == Hx711Status::kDisabled) {
+    render_missing_devices_screen(state);
+    return;
+  }
+
+  if (display::is_narrow()) {
+    render_compact_screen(state);
+    return;
+  }
+
   render_developer_screen(state);
 }
 }  // namespace
@@ -349,8 +559,12 @@ void App::begin() {
   auto cfg = M5.config();
   cfg.fallback_board = m5::board_t::board_M5Stack;
   M5.begin(cfg);
+  log_board_status("Board", M5.getBoard());
   board::begin_i2c_mutex();
   display::begin();
+  display::show_boot_test();
+  diagnostics::log_line("Display: ready");
+  (void)run_missing_device_self_test();
 
   start_tasks();
 }
@@ -724,7 +938,7 @@ void App::rfid_task_loop() {
 
       if (!reader.begin()) {
         RfidEvent event{};
-        event.kind = RfidEvent::Kind::kReaderMissing;
+        event.kind = kIgnoreMissingPn532 ? RfidEvent::Kind::kWaitingForCard : RfidEvent::Kind::kReaderMissing;
         event.timestamp_ms = now;
         if (!publish_rfid_event(event)) {
           vTaskDelay(pdMS_TO_TICKS(50));

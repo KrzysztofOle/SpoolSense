@@ -46,10 +46,6 @@
 #endif
 #endif
 
-#ifndef ADC_ATTEN_DB_12
-#define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
-#endif
-
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 

@@ -2,7 +2,7 @@
 
 Wersja angielska: [README.md](README.md)
 
-<small>Last updated: 2026-05-08T23:43:37+02:00</small>
+<small>Last updated: 2026-05-09T14:37:57+02:00</small>
 
 SpoolSense to inteligentna waga do szpuli filamentu przeznaczona do środowisk druku 3D.  
 Mierzy wagę filamentu w czasie rzeczywistym, śledzi zużycie i opcjonalnie monitoruje proces suszenia, gdy jest umieszczona pod suszarką do filamentu.
@@ -37,6 +37,19 @@ Dzięki temu możliwe jest:
 - Mikrokontroler (ESP32 / podobny)
 - Czytnik RFID (np. PN532)
 - Opcjonalny czujnik temperatury (integracja z suszarką)
+
+### M5Stack Core ESP32 - informacje pomocnicze
+
+Projekt jest rozwijany z myślą o M5Stack Core ESP32, więc poniższe mapowanie pomaga przy okablowaniu i testach:
+
+- wyświetlacz LCD 320x240 z kontrolerem `ILI9342C`
+- karta TF podłączona przez SPI
+- przyciski `BtnA`, `BtnB`, `BtnC` na pinach `GPIO39`, `GPIO38`, `GPIO37`
+- głośnik na pinie `GPIO25`
+- złącze `GROVE A` dla I2C: `GPIO22` jako `SCL`, `GPIO21` jako `SDA`
+- układ zarządzania zasilaniem `IP5306` pod adresem I2C `0x75`
+
+To są informacje referencyjne dla warstwy sprzętowej M5Stack i mogą pomóc przy debugowaniu LCD, przycisków oraz magistrali I2C.
 
 ## 🔧 Model runtime
 

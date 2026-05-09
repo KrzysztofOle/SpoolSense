@@ -79,7 +79,7 @@ out:
   {
     rmt_led_strip_encoder_t *led_encoder = NULL;
     if (config && ret_encoder) {
-      led_encoder = (rmt_led_strip_encoder_t*)malloc(sizeof(rmt_led_strip_encoder_t));
+      led_encoder = (rmt_led_strip_encoder_t*)rmt_alloc_encoder_mem(sizeof(rmt_led_strip_encoder_t));
       if (led_encoder) {
         led_encoder->base.encode = rmt_encode_led_strip;
         led_encoder->base.del = rmt_del_led_strip_encoder;

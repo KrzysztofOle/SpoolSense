@@ -37,6 +37,7 @@ bool Pn532Reader::begin() {
 
   board::I2cLock lock;
   board::begin_pn532_wire();
+  board::log_i2c_scan();
   if (!pn532_.begin()) {
     return false;
   }

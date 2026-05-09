@@ -8,6 +8,7 @@ sdkconfig.old
 sdkconfig.ci
 sdkconfig.*.old
 .pio/
+sandbox/
 
 # Local ESP-IDF component manager cache, with explicit exceptions for
 # compatibility patches that must remain visible in the workspace.

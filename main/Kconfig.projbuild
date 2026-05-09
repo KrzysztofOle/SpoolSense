@@ -7,4 +7,16 @@ config SPOOLSENSE_ENABLE_HX711
         Enable the HX711 task and related measurement flow.
         When disabled, the firmware runs in RFID/UI developer mode.
 
+config SPOOLSENSE_IGNORE_MISSING_PN532
+    bool "Ignore missing PN532"
+    default y
+    help
+        Treat a missing PN532 reader as an idle RFID subsystem instead of an error.
+
+config SPOOLSENSE_IGNORE_MISSING_HX711
+    bool "Ignore missing HX711"
+    default y
+    help
+        Treat a missing HX711 scale as a disabled subsystem instead of an error.
+
 endmenu

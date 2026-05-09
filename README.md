@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-08T23:43:37+02:00</small>
+<small>Last updated: 2026-05-09T14:37:57+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -37,6 +37,19 @@ This allows:
 - Microcontroller (ESP32 / similar)
 - RFID reader (e.g. PN532)
 - Optional temperature sensor (dryer integration)
+
+### M5Stack Core ESP32 - reference notes
+
+The project is being developed with M5Stack Core ESP32 hardware in mind, so this mapping is useful for wiring and debug work:
+
+- 320x240 LCD with the `ILI9342C` controller
+- TF card connected over SPI
+- `BtnA`, `BtnB`, `BtnC` on `GPIO39`, `GPIO38`, `GPIO37`
+- speaker on `GPIO25`
+- `GROVE A` I2C pins: `GPIO22` as `SCL`, `GPIO21` as `SDA`
+- `IP5306` power-management chip at I2C address `0x75`
+
+These are hardware reference details for the M5Stack layer and can help when debugging the LCD, buttons, and I2C bus.
 
 ## 🔧 Runtime Model
 

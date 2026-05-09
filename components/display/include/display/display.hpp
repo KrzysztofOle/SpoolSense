@@ -18,6 +18,8 @@
 
 namespace display {
 void begin();
+bool is_narrow();
+void show_boot_test();
 void show_text(const char *line1, const char *line2 = nullptr);
 void append_line(const char *line);
 void show_card_removed();

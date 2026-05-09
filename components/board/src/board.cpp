@@ -12,10 +12,19 @@
 
 #include "board/board.hpp"
 
+#include <Arduino.h>
+#include <cstdio>
 #include <Wire.h>
+
+#include "diagnostics/diagnostics.hpp"
 
 namespace {
 SemaphoreHandle_t g_i2c_mutex = nullptr;
+
+bool probe_i2c_device(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
+}
 }  // namespace
 
 namespace board {
@@ -27,6 +36,26 @@ void begin_i2c_mutex() {
 
 void begin_pn532_wire() {
   Wire.begin(kPn532SdaPin, kPn532SclPin);
+}
+
+void log_i2c_scan() {
+  diagnostics::log_line("I2C probe: begin");
+
+  char line[64] = {};
+
+  std::snprintf(line, sizeof(line), "I2C PN532 0x%02X: %s", kPn532I2cAddress,
+                probe_i2c_device(kPn532I2cAddress) ? "present" : "missing");
+  diagnostics::log_line(line);
+
+  std::snprintf(line, sizeof(line), "I2C IP5306 0x%02X: %s", kIp5306I2cAddress,
+                probe_i2c_device(kIp5306I2cAddress) ? "present" : "missing");
+  diagnostics::log_line(line);
+
+  std::snprintf(line, sizeof(line), "I2C AXP192 0x%02X: %s", kAxp192I2cAddress,
+                probe_i2c_device(kAxp192I2cAddress) ? "present" : "missing");
+  diagnostics::log_line(line);
+
+  diagnostics::log_line("I2C probe: done");
 }
 
 bool take_i2c(TickType_t timeout_ticks) {

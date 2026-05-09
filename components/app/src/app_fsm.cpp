@@ -26,6 +26,18 @@ namespace app {
 namespace {
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
 
+#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532) && CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532
+constexpr bool kIgnoreMissingPn532 = true;
+#else
+constexpr bool kIgnoreMissingPn532 = false;
+#endif
+
+#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711) && CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711
+constexpr bool kIgnoreMissingHx711 = true;
+#else
+constexpr bool kIgnoreMissingHx711 = false;
+#endif
+
 void clear_uid(uint8_t *uid) {
   std::memset(uid, 0, kMaxRfidUidLength);
 }
@@ -34,10 +46,10 @@ void clear_uid(uint8_t *uid) {
 void AppFsm::reset(AppState &state, uint32_t now_ms) const {
   state = AppState{};
   state.current_mode = AppMode::kBoot;
-  state.rfid_status = RfidStatus::kBooting;
+  state.rfid_status = kIgnoreMissingPn532 ? RfidStatus::kWaitingForCard : RfidStatus::kBooting;
 #if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
-  state.hx711_enabled = true;
-  state.hx711_status = state.hx711_enabled ? Hx711Status::kBooting : Hx711Status::kDisabled;
+  state.hx711_enabled = !kIgnoreMissingHx711;
+  state.hx711_status = kIgnoreMissingHx711 ? Hx711Status::kDisabled : Hx711Status::kBooting;
 #else
   state.hx711_enabled = false;
   state.hx711_status = Hx711Status::kDisabled;
@@ -46,6 +58,7 @@ void AppFsm::reset(AppState &state, uint32_t now_ms) const {
   state.rfid_last_change_ms = now_ms;
   state.hx711_last_sample_ms = now_ms;
   state.hx711_zeroed_ms = now_ms;
+  sync_mode(state);
 }
 
 bool AppFsm::transition_to(AppState &state, AppMode next_mode) {
@@ -173,6 +186,14 @@ bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
 
   switch (event.kind) {
     case WeightEvent::Kind::kNotFound:
+      if (kIgnoreMissingHx711) {
+        state.hx711_enabled = false;
+        state.hx711_status = Hx711Status::kDisabled;
+        state.hx711_has_sample = false;
+        state.hx711_zeroed = false;
+        sync_mode(state);
+        return true;
+      }
       state.hx711_status = Hx711Status::kNotFound;
       state.hx711_has_sample = false;
       state.hx711_zeroed = false;
