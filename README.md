@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-09T14:37:57+02:00</small>
+<small>Last updated: 2026-05-10T12:32:00+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -47,15 +47,41 @@ The project is being developed with M5Stack Core ESP32 hardware in mind, so this
 - `BtnA`, `BtnB`, `BtnC` on `GPIO39`, `GPIO38`, `GPIO37`
 - speaker on `GPIO25`
 - `GROVE A` I2C pins: `GPIO22` as `SCL`, `GPIO21` as `SDA`
+- `AXP192` power-management chip for battery and power handling
 - `IP5306` power-management chip at I2C address `0x75`
 
 These are hardware reference details for the M5Stack layer and can help when debugging the LCD, buttons, and I2C bus.
+
+### M5Stack LCD handling
+
+The M5Stack Core ESP32 uses an `ILI9342C` LCD controller. In this project the LCD is driven directly through `esp_lcd`, not through Arduino display helpers.
+
+Practical rules for the LCD layer:
+
+- use `COLMOD = 0x66` for 18-bit `RGB666` pixel data
+- use `MADCTL` bit `D3` to switch between `RGB` and `BGR`
+- keep gray ramps neutral when validating color order, because `R = G = B` should stay gray even if the channel order changes
+- use the sandbox test screen in `sandbox/espidf_native` to verify `BGR` and `GRAY` visually on real hardware
+
+The hardware-specific implementation lives in:
+
+- `sandbox/espidf_native/main/src/native_lcd.cpp`
+- `sandbox/espidf_native/main/src/native_lvgl_ui.cpp`
 
 ## 🔧 Runtime Model
 
 The firmware now runs as a FreeRTOS task-based runtime instead of a single application loop.
 HX711 can be disabled for a lightweight RFID/UI developer mode.
 Set `CONFIG_SPOOLSENSE_ENABLE_HX711=n` to keep the runtime on RFID, LCD, buttons, and FSM only.
+
+### Boot Diagnostics
+
+On startup the firmware probes the available hardware modules before it starts the runtime tasks.
+
+- LCD shows a diagnostic screen with `present` / `missing` status for RFID, HX711, and AXP192
+- AXP192 is the power-management / battery chip on the M5Stack Core ESP32 and is treated as an optional power module
+- missing modules are not started, so the runtime does not keep retrying them in the background
+- present modules are enabled normally after the probe completes
 
 Startup creates separate tasks for:
 
@@ -109,6 +135,11 @@ After the ESP-IDF migration, the same task split remains the execution model for
 
 Expected messages:
 
+- `Diagnostics: begin`
+- `RFID: present` or `RFID: missing`
+- `HX711: present` or `HX711: missing`
+- `AXP192: present` or `AXP192: missing`
+- `Diagnostics: done`
 - `HX711 disabled` when the subsystem is turned off in config
 - `HX711 init OK`
 - `HX711 not found`

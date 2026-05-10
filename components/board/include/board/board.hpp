@@ -28,9 +28,13 @@ constexpr uint8_t kIp5306I2cAddress = 0x75;
 constexpr uint8_t kAxp192I2cAddress = 0x34;
 constexpr uint8_t kHx711DoutPin = 16;
 constexpr uint8_t kHx711SckPin = 17;
+constexpr uint8_t kBtnAPin = 39;
+constexpr uint8_t kBtnBPin = 38;
+constexpr uint8_t kBtnCPin = 37;
 
 void begin_pn532_wire();
 void begin_i2c_mutex();
+bool probe_i2c_device(uint8_t addr);
 void log_i2c_scan();
 bool take_i2c(TickType_t timeout_ticks = portMAX_DELAY);
 void give_i2c();

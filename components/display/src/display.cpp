@@ -1,224 +1,513 @@
 /**
- * M5 display helpers for the current firmware UI.
+ * Native LCD helpers for the firmware UI.
  *
  * Features (EN):
- * - Initializes the M5 display.
- * - Renders status, RFID, and diagnostic messages.
+ * - Initializes the M5Stack Core LCD directly through esp_lcd.
+ * - Renders the firmware status screen with LVGL labels.
+ * - Keeps the display path independent from Arduino display helpers.
  *
  * Funkcje (PL):
- * - Inicjalizuje wyswietlacz M5.
- * - Rysuje status, RFID oraz komunikaty diagnostyczne.
+ * - Inicjalizuje LCD M5Stack Core bezposrednio przez esp_lcd.
+ * - Rysuje ekran statusu firmware za pomoca etykiet LVGL.
+ * - Uniezaleznia obsluge wyswietlacza od pomocniczych bibliotek Arduino.
  *
  * File: components/display/src/display.cpp
  */
 
 #include "display/display.hpp"
 
-#include <Arduino.h>
-#include <M5GFX.h>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-#include "lgfx/v1/panel/Panel_ILI9342.hpp"
-#include "lgfx/v1/platforms/esp32/Bus_SPI.hpp"
-#include "lgfx/v1/platforms/esp32/Light_PWM.hpp"
+#include "driver/gpio.h"
+#include "driver/spi_master.h"
+#include "esp_check.h"
+#include "esp_err.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "lvgl.h"
 
-#include "board/board.hpp"
 #include "diagnostics/diagnostics.hpp"
 
 namespace display {
 namespace {
-class ClassicM5StackDisplay : public lgfx::LGFX_Device {
+enum class ColorOrder : uint8_t {
+  kRgb = 0,
+  kBgr = 1,
+};
+
+constexpr gpio_num_t k_lcd_pin_mosi = GPIO_NUM_23;
+constexpr gpio_num_t k_lcd_pin_miso = GPIO_NUM_19;
+constexpr gpio_num_t k_lcd_pin_sclk = GPIO_NUM_18;
+constexpr gpio_num_t k_lcd_pin_cs = GPIO_NUM_14;
+constexpr gpio_num_t k_lcd_pin_dc = GPIO_NUM_27;
+constexpr gpio_num_t k_lcd_pin_rst = GPIO_NUM_33;
+constexpr gpio_num_t k_lcd_pin_backlight = GPIO_NUM_32;
+constexpr spi_host_device_t k_lcd_host = SPI2_HOST;
+
+constexpr lv_coord_t k_line_x = 12;
+constexpr lv_coord_t k_regular_line_y[] = {10, 44, 78, 112};
+constexpr lv_coord_t k_diagnostic_line_y[] = {10, 56, 102, 148};
+constexpr char k_empty_line[] = "";
+constexpr size_t k_max_line_length = 128;
+constexpr int k_draw_buffer_lines = 30;
+
+SemaphoreHandle_t s_tx_done = nullptr;
+bool s_bus_initialized = false;
+
+bool lcd_wait_tx_done_impl(TickType_t timeout_ticks = pdMS_TO_TICKS(1000)) {
+  return xSemaphoreTake(s_tx_done, timeout_ticks) == pdTRUE;
+}
+
+bool on_color_trans_done(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t *, void *) {
+  BaseType_t higher_priority_task_woken = pdFALSE;
+  xSemaphoreGiveFromISR(s_tx_done, &higher_priority_task_woken);
+  return higher_priority_task_woken == pdTRUE;
+}
+
+esp_err_t lcd_write_cmd(esp_lcd_panel_io_handle_t io, uint8_t cmd) {
+  return esp_lcd_panel_io_tx_param(io, cmd, nullptr, 0);
+}
+
+esp_err_t lcd_write_cmd(esp_lcd_panel_io_handle_t io, uint8_t cmd, const uint8_t *data, size_t len) {
+  return esp_lcd_panel_io_tx_param(io, cmd, data, len);
+}
+
+uint8_t madctl_for_order(ColorOrder order) {
+  switch (order) {
+    case ColorOrder::kRgb:
+      return 0x00;
+    case ColorOrder::kBgr:
+      return 0x08;
+  }
+
+  return 0x00;
+}
+
+uint32_t millis_now() {
+  return static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
+}
+
+void lcd_delay_ms(int ms) {
+  vTaskDelay(pdMS_TO_TICKS(ms));
+}
+
+void lcd_reset_panel() {
+  gpio_reset_pin(k_lcd_pin_rst);
+  gpio_set_direction(k_lcd_pin_rst, GPIO_MODE_OUTPUT);
+  gpio_set_level(k_lcd_pin_rst, 0);
+  lcd_delay_ms(20);
+  gpio_set_level(k_lcd_pin_rst, 1);
+  lcd_delay_ms(120);
+}
+
+void lcd_enable_backlight() {
+  gpio_reset_pin(k_lcd_pin_backlight);
+  gpio_set_direction(k_lcd_pin_backlight, GPIO_MODE_OUTPUT);
+  gpio_set_level(k_lcd_pin_backlight, 1);
+}
+
+class NativeLcd {
  public:
-  bool ready() const {
-    return getPanel() != nullptr;
+  static constexpr int kWidth = 320;
+  static constexpr int kHeight = 240;
+
+  esp_err_t begin() {
+    if (started_) {
+      return ESP_OK;
+    }
+
+    if (s_tx_done == nullptr) {
+      s_tx_done = xSemaphoreCreateBinary();
+      if (s_tx_done == nullptr) {
+        return ESP_ERR_NO_MEM;
+      }
+    }
+
+    lcd_enable_backlight();
+    lcd_reset_panel();
+
+    if (!s_bus_initialized) {
+      spi_bus_config_t buscfg = {};
+      buscfg.sclk_io_num = k_lcd_pin_sclk;
+      buscfg.mosi_io_num = k_lcd_pin_mosi;
+      buscfg.miso_io_num = k_lcd_pin_miso;
+      buscfg.quadwp_io_num = -1;
+      buscfg.quadhd_io_num = -1;
+      buscfg.max_transfer_sz = kWidth * 40 * 2;
+
+      ESP_RETURN_ON_ERROR(spi_bus_initialize(k_lcd_host, &buscfg, SPI_DMA_CH_AUTO), "display",
+                          "spi_bus_initialize failed");
+      s_bus_initialized = true;
+    }
+
+    esp_lcd_panel_io_spi_config_t io_config = {};
+    io_config.cs_gpio_num = k_lcd_pin_cs;
+    io_config.dc_gpio_num = k_lcd_pin_dc;
+    io_config.spi_mode = 0;
+    io_config.pclk_hz = 40 * 1000 * 1000;
+    io_config.trans_queue_depth = 1;
+    io_config.lcd_cmd_bits = 8;
+    io_config.lcd_param_bits = 8;
+    io_config.on_color_trans_done = on_color_trans_done;
+    io_config.user_ctx = nullptr;
+
+    ESP_RETURN_ON_ERROR(
+      esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)k_lcd_host, &io_config, &io_handle_),
+      "display", "esp_lcd_new_panel_io_spi failed");
+
+    static const uint8_t set_extc[] = {0xFF, 0x93, 0x42};
+    static const uint8_t pwctr1[] = {0x12, 0x12};
+    static const uint8_t pwctr2[] = {0x03};
+    static const uint8_t vmctr1[] = {0xF2};
+    static const uint8_t gamma_pos[] = {0x00, 0x0C, 0x11, 0x04, 0x11, 0x08, 0x37, 0x89, 0x4C, 0x06,
+                                        0x0C, 0x0A, 0x2E, 0x34, 0x0F};
+    static const uint8_t gamma_neg[] = {0x00, 0x0B, 0x11, 0x05, 0x13, 0x09, 0x33, 0x67, 0x48, 0x07,
+                                        0x0E, 0x0B, 0x2E, 0x33, 0x0F};
+    static const uint8_t dfunctr[] = {0x08, 0x82, 0x1D, 0x04};
+    static const uint8_t colmod[] = {0x66};
+    static const uint8_t pwr_ctrl[] = {0x01, 0x00, 0x00};
+
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x01), "display", "SWRESET failed");
+    lcd_delay_ms(120);
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x11), "display", "SLPOUT failed");
+    lcd_delay_ms(120);
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xFF, set_extc, sizeof(set_extc)), "display",
+                        "SETEXTC failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xC0, pwctr1, sizeof(pwctr1)), "display",
+                        "PWCTR1 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xC1, pwctr2, sizeof(pwctr2)), "display",
+                        "PWCTR2 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xC5, vmctr1, sizeof(vmctr1)), "display",
+                        "VMCTR1 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xB0, (const uint8_t *)"\xE0", 1), "display",
+                        "B0 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xF6, pwr_ctrl, sizeof(pwr_ctrl)), "display",
+                        "F6 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xE0, gamma_pos, sizeof(gamma_pos)), "display",
+                        "GMCTRP1 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xE1, gamma_neg, sizeof(gamma_neg)), "display",
+                        "GMCTRN1 failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xB6, dfunctr, sizeof(dfunctr)), "display",
+                        "DFUNCTR failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x3A, colmod, sizeof(colmod)), "display",
+                        "COLMOD failed");
+    ESP_RETURN_ON_ERROR(set_color_order(color_order_), "display", "MADCTL failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x21), "display", "INVON failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x29), "display", "DISPON failed");
+    lcd_delay_ms(20);
+
+    started_ = true;
+    return ESP_OK;
   }
 
-  protected:
-  bool init_impl(bool use_reset, bool use_clear) override {
-    diagnostics::log_line("LCD: init_impl enter");
-    if (!setup_classic_m5stack_panel()) {
-      diagnostics::log_line("LCD: setup failed");
-      return false;
-    }
-
-    diagnostics::log_line("LCD: panel setup ok");
-    this->setPanel(static_cast<lgfx::Panel_Device *>(&classic_panel()));
-    auto *panel = this->getPanel();
-    if (panel == nullptr) {
-      diagnostics::log_line("LCD: panel null");
-      return false;
-    }
-
-    diagnostics::log_line("LCD: panel init start");
-    if (!panel->init(use_reset)) {
-      diagnostics::log_line("LCD: panel init failed");
-      return false;
-    }
-    diagnostics::log_line("LCD: panel init done");
-
-    startWrite();
-    invertDisplay(panel->getInvert());
-    setColorDepth(panel->getWriteDepth());
-    setRotation(panel->getRotation());
-    if (use_clear) {
-      clear();
-    }
-    setPivot(width() >> 1, height() >> 1);
-    endWrite();
-    setBrightness(255);
-    panel->initTouch();
-    diagnostics::log_line("LCD: panel init ok");
-    return true;
+  esp_err_t set_color_order(ColorOrder order) {
+    color_order_ = order;
+    const uint8_t madctl = madctl_for_order(order);
+    return lcd_write_cmd(io_handle_, 0x36, &madctl, 1);
   }
 
-  private:
-  static lgfx::Bus_SPI &classic_bus() {
-    static lgfx::Bus_SPI bus;
-    return bus;
+  esp_err_t send_area(int x1, int y1, int x2, int y2, const uint8_t *pixels) {
+    uint8_t column_data[4];
+    column_data[0] = static_cast<uint8_t>(x1 >> 8);
+    column_data[1] = static_cast<uint8_t>(x1 & 0xFF);
+    column_data[2] = static_cast<uint8_t>(x2 >> 8);
+    column_data[3] = static_cast<uint8_t>(x2 & 0xFF);
+
+    uint8_t row_data[4];
+    row_data[0] = static_cast<uint8_t>(y1 >> 8);
+    row_data[1] = static_cast<uint8_t>(y1 & 0xFF);
+    row_data[2] = static_cast<uint8_t>(y2 >> 8);
+    row_data[3] = static_cast<uint8_t>(y2 & 0xFF);
+
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x2A, column_data, sizeof(column_data)), "display",
+                        "CASET failed");
+    ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x2B, row_data, sizeof(row_data)), "display",
+                        "PASET failed");
+
+    const int width = x2 - x1 + 1;
+    const int height = y2 - y1 + 1;
+    const size_t payload_size = static_cast<size_t>(width) * static_cast<size_t>(height) * 3U;
+    return esp_lcd_panel_io_tx_color(io_handle_, 0x2C, pixels, payload_size);
   }
 
-  class ClassicM5StackPanel : public lgfx::Panel_ILI9342 {
-   public:
-    ClassicM5StackPanel() {
-      _cfg.pin_cs = GPIO_NUM_14;
-      _cfg.pin_rst = GPIO_NUM_33;
-      _cfg.offset_rotation = 3;
-      _rotation = 1;
-    }
+  bool wait_tx_done() {
+    return lcd_wait_tx_done_impl();
+  }
 
-    bool init(bool use_reset) override {
-      _cfg.invert = lgfx::gpio::command(
-        (const uint8_t[]) {
-          lgfx::gpio::command_mode_output, GPIO_NUM_33,
-          lgfx::gpio::command_write_low, GPIO_NUM_33,
-          lgfx::gpio::command_mode_input_pulldown, GPIO_NUM_33,
-          lgfx::gpio::command_write_high, GPIO_NUM_33,
-          lgfx::gpio::command_read, GPIO_NUM_33,
-          lgfx::gpio::command_mode_output, GPIO_NUM_33,
-          lgfx::gpio::command_end
-        });
-      return lgfx::Panel_ILI9342::init(use_reset);
-    }
+  int width() const {
+    return kWidth;
+  }
+
+ private:
+  ColorOrder color_order_ = ColorOrder::kRgb;
+  esp_lcd_panel_io_handle_t io_handle_ = nullptr;
+  bool started_ = false;
+};
+
+void flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p) {
+  auto *lcd = static_cast<NativeLcd *>(disp_drv->user_data);
+  if (lcd == nullptr) {
+    lv_disp_flush_ready(disp_drv);
+    return;
+  }
+
+  const int x1 = area->x1;
+  const int y1 = area->y1;
+  const int x2 = area->x2;
+  const int y2 = area->y2;
+  const int width = (x2 - x1 + 1);
+  const int height = (y2 - y1 + 1);
+  const int px_count = width * height;
+
+  static uint8_t color_buffer[NativeLcd::kWidth * k_draw_buffer_lines * 3];
+  for (int i = 0; i < px_count; ++i) {
+    const uint16_t color = color_p[i].full;
+    const uint8_t r5 = static_cast<uint8_t>((color >> 11) & 0x1FU);
+    const uint8_t g6 = static_cast<uint8_t>((color >> 5) & 0x3FU);
+    const uint8_t b5 = static_cast<uint8_t>(color & 0x1FU);
+    const uint8_t r6 = static_cast<uint8_t>((r5 << 1U) | (r5 >> 4U));
+    const uint8_t b6 = static_cast<uint8_t>((b5 << 1U) | (b5 >> 4U));
+    const size_t offset = static_cast<size_t>(i) * 3U;
+    color_buffer[offset + 0] = static_cast<uint8_t>(r6 << 2U);
+    color_buffer[offset + 1] = static_cast<uint8_t>(g6 << 2U);
+    color_buffer[offset + 2] = static_cast<uint8_t>(b6 << 2U);
+  }
+
+  if (lcd->send_area(x1, y1, x2, y2, color_buffer) != ESP_OK) {
+    diagnostics::log_line("LCD: flush failed");
+  } else if (!lcd->wait_tx_done()) {
+    diagnostics::log_line("LCD: flush timeout");
+  }
+
+  lv_disp_flush_ready(disp_drv);
+}
+
+class NativeDisplay {
+ public:
+  enum class ScreenStyle : uint8_t {
+    kRegular,
+    kDiagnostic,
   };
 
-  static ClassicM5StackPanel &classic_panel() {
-    static ClassicM5StackPanel lcd_panel;
-    return lcd_panel;
-  }
-
-  static lgfx::Light_PWM &classic_backlight() {
-    static lgfx::Light_PWM backlight;
-    return backlight;
-  }
-
-  static bool setup_classic_m5stack_panel() {
-    static bool configured = false;
-    if (configured) {
+  bool begin() {
+    if (configured_) {
       return true;
     }
 
-    auto &bus = classic_bus();
-    auto &lcd_panel = classic_panel();
-    auto &backlight = classic_backlight();
+    if (lcd_.begin() != ESP_OK) {
+      diagnostics::log_line("LCD: native init failed");
+      return false;
+    }
 
-    auto bus_cfg = bus.config();
-    bus_cfg.freq_write = 40000000;
-    bus_cfg.freq_read = 16000000;
-    bus_cfg.spi_mode = 0;
-    bus_cfg.use_lock = true;
-    bus_cfg.spi_host = VSPI_HOST;
-    bus_cfg.dma_channel = 1;
-    bus_cfg.pin_mosi = GPIO_NUM_23;
-    bus_cfg.pin_miso = GPIO_NUM_19;
-    bus_cfg.pin_sclk = GPIO_NUM_18;
-    bus_cfg.pin_dc = GPIO_NUM_27;
-    bus_cfg.spi_3wire = true;
-    bus.config(bus_cfg);
+    if (lcd_.set_color_order(ColorOrder::kBgr) != ESP_OK) {
+      diagnostics::log_line("LCD: color order failed");
+      return false;
+    }
 
-    auto panel_cfg = lcd_panel.config();
-    panel_cfg.pin_cs = GPIO_NUM_14;
-    panel_cfg.pin_rst = GPIO_NUM_33;
-    panel_cfg.offset_rotation = 3;
-    panel_cfg.bus_shared = true;
-    lcd_panel.config(panel_cfg);
-    lcd_panel.setRotation(1);
-    lcd_panel.setBus(&bus);
+    lv_init();
+    lv_disp_draw_buf_init(&draw_buf_, draw_buffer_, nullptr, NativeLcd::kWidth * k_draw_buffer_lines);
 
-    auto light_cfg = backlight.config();
-    light_cfg.pin_bl = GPIO_NUM_32;
-    light_cfg.pwm_channel = 7;
-    light_cfg.freq = 44100;
-    light_cfg.offset = 0;
-    light_cfg.invert = false;
-    backlight.config(light_cfg);
-    lcd_panel.setLight(&backlight);
+    lv_disp_drv_init(&disp_drv_);
+    disp_drv_.hor_res = NativeLcd::kWidth;
+    disp_drv_.ver_res = NativeLcd::kHeight;
+    disp_drv_.flush_cb = flush_cb;
+    disp_drv_.draw_buf = &draw_buf_;
+    disp_drv_.user_data = &lcd_;
+    disp_ = lv_disp_drv_register(&disp_drv_);
+    if (disp_ == nullptr) {
+      diagnostics::log_line("LCD: LVGL register failed");
+      return false;
+    }
+    lv_disp_set_default(disp_);
 
-    configured = true;
+    clear_lines();
+    build_screen(ScreenStyle::kRegular);
+    sync_time();
+    lv_timer_handler();
+    configured_ = true;
     return true;
   }
+
+  bool is_narrow() const {
+    return configured_ && lcd_.width() < 200;
+  }
+
+  void show_boot_test() {
+    show_text("LCD TEST", "SpoolSense");
+  }
+
+  void show_text(const char *line1, const char *line2) {
+    show_lines(line1, line2, nullptr, nullptr);
+  }
+
+  void show_lines(const char *line1, const char *line2, const char *line3, const char *line4) {
+    show_lines_internal(ScreenStyle::kRegular, line1, line2, line3, line4);
+  }
+
+  void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4) {
+    show_lines_internal(ScreenStyle::kDiagnostic, line1, line2, line3, line4);
+  }
+
+  void append_line(const char *line) {
+    if (!configured_ || line == nullptr) {
+      return;
+    }
+
+    const size_t index = line_count_ < 4U ? line_count_ : 3U;
+    set_line(index, line);
+    if (line_count_ < 4U) {
+      ++line_count_;
+    }
+    refresh();
+  }
+
+ private:
+  void ensure_style(ScreenStyle style) {
+    if (configured_ && style == screen_style_) {
+      return;
+    }
+
+    screen_style_ = style;
+    build_screen(style);
+  }
+
+  void show_lines_internal(ScreenStyle style, const char *line1, const char *line2, const char *line3,
+                           const char *line4) {
+    if (!configured_) {
+      return;
+    }
+
+    ensure_style(style);
+    clear_lines();
+    set_line(0, line1);
+    set_line(1, line2);
+    set_line(2, line3);
+    set_line(3, line4);
+    line_count_ = 4U;
+    refresh();
+  }
+
+  void clear_lines() {
+    for (auto &line : lines_) {
+      line[0] = '\0';
+    }
+    line_count_ = 0;
+  }
+
+  void set_line(size_t index, const char *text) {
+    if (index >= lines_.size()) {
+      return;
+    }
+
+    if (text == nullptr) {
+      lines_[index][0] = '\0';
+      return;
+    }
+
+    std::snprintf(lines_[index].data(), lines_[index].size(), "%s", text);
+  }
+
+  void build_screen(ScreenStyle style) {
+    lv_obj_t *scr = lv_scr_act();
+    lv_obj_clean(scr);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+
+    const lv_coord_t *line_y = style == ScreenStyle::kDiagnostic ? k_diagnostic_line_y : k_regular_line_y;
+    const lv_font_t *font = style == ScreenStyle::kDiagnostic ? &lv_font_montserrat_20 : &lv_font_montserrat_14;
+
+    for (size_t index = 0; index < labels_.size(); ++index) {
+      labels_[index] = lv_label_create(scr);
+      lv_obj_set_style_text_color(labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(labels_[index], font, LV_PART_MAIN);
+      lv_obj_set_style_text_align(labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+      lv_label_set_long_mode(labels_[index], LV_LABEL_LONG_WRAP);
+      lv_obj_set_width(labels_[index], NativeLcd::kWidth - 24);
+      lv_obj_set_pos(labels_[index], k_line_x, line_y[index]);
+    }
+  }
+
+  void refresh() {
+    sync_time();
+
+    for (size_t index = 0; index < labels_.size(); ++index) {
+      lv_label_set_text(labels_[index], lines_[index][0] == '\0' ? k_empty_line : lines_[index].data());
+    }
+
+    lv_timer_handler();
+    lv_refr_now(nullptr);
+  }
+
+  void sync_time() {
+    const uint32_t now_ms = millis_now();
+    if (have_tick_) {
+      lv_tick_inc(now_ms - last_tick_ms_);
+    }
+    last_tick_ms_ = now_ms;
+    have_tick_ = true;
+  }
+
+  NativeLcd lcd_{};
+  lv_disp_draw_buf_t draw_buf_{};
+  lv_disp_drv_t disp_drv_{};
+  lv_disp_t *disp_ = nullptr;
+  std::array<std::array<char, k_max_line_length>, 4> lines_{};
+  std::array<lv_obj_t *, 4> labels_ = {nullptr, nullptr, nullptr, nullptr};
+  size_t line_count_ = 0;
+  uint32_t last_tick_ms_ = 0;
+  bool have_tick_ = false;
+  bool configured_ = false;
+  ScreenStyle screen_style_ = ScreenStyle::kRegular;
+  static lv_color_t draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 };
 
-ClassicM5StackDisplay &display_device() {
-  static ClassicM5StackDisplay device;
-  return device;
-}
+lv_color_t NativeDisplay::draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 
-bool display_ready() {
-  return display_device().ready();
+NativeDisplay &display_device() {
+  static NativeDisplay device;
+  return device;
 }
 }  // namespace
 
 void begin() {
   diagnostics::log_line("LCD: begin");
-  auto &display = display_device();
-  if (!display.init()) {
+  if (!display_device().begin()) {
     diagnostics::log_line("LCD: init failed");
     return;
   }
 
-  if (!display_ready()) {
-    diagnostics::log_line("LCD: not ready");
-    return;
-  }
-
-  board::I2cLock lock;
-  display.setTextSize(2);
-  display.setTextColor(WHITE, BLACK);
-  display.fillScreen(BLACK);
-  diagnostics::log_line("LCD: manual ready");
+  diagnostics::log_line("LCD: ready");
 }
 
 bool is_narrow() {
-  return display_ready() && display_device().width() < 200;
+  return display_device().is_narrow();
 }
 
 void show_boot_test() {
-  show_text("LCD TEST", "SpoolSense");
+  display_device().show_boot_test();
 }
 
 void show_text(const char *line1, const char *line2) {
-  if (!display_ready()) {
-    return;
-  }
+  display_device().show_text(line1, line2);
+}
 
-  board::I2cLock lock;
-  auto &display = display_device();
-  display.fillScreen(BLACK);
-  display.setCursor(0, 0);
-  display.println(line1);
-  if (line2 != nullptr) {
-    display.println(line2);
-  }
+void show_lines(const char *line1, const char *line2, const char *line3, const char *line4) {
+  display_device().show_lines(line1, line2, line3, line4);
+}
+
+void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4) {
+  display_device().show_diagnostics(line1, line2, line3, line4);
 }
 
 void append_line(const char *line) {
-  if (!display_ready()) {
-    return;
-  }
-
-  board::I2cLock lock;
-  display_device().println(line);
+  display_device().append_line(line);
 }
 
 void show_card_removed() {
@@ -230,7 +519,7 @@ void show_uid_and_type(const uint8_t *uid, uint8_t uid_length) {
   diagnostics::format_uid(uid, uid_length, uid_line, sizeof(uid_line));
 
   char type_line[48] = {};
-  snprintf(type_line, sizeof(type_line), "Type: %s", diagnostics::classify_tag_type(uid_length));
+  std::snprintf(type_line, sizeof(type_line), "Type: %s", diagnostics::classify_tag_type(uid_length));
 
   show_text(uid_line, type_line);
 }
@@ -241,12 +530,12 @@ void show_uid_and_usage(const uint8_t *uid, uint8_t uid_length, uint32_t usage_s
   diagnostics::format_uid(uid, uid_length, uid_line, sizeof(uid_line));
 
   char usage_line[48] = {};
-  snprintf(usage_line, sizeof(usage_line), "Usage: %lu s",
-           static_cast<unsigned long>(usage_seconds));
-  size_t used = strlen(usage_line);
+  std::snprintf(usage_line, sizeof(usage_line), "Usage: %lu s",
+                static_cast<unsigned long>(usage_seconds));
+  size_t used = std::strlen(usage_line);
   if (used + 1 < sizeof(usage_line)) {
-    snprintf(usage_line + used, sizeof(usage_line) - used, " Life: %u%%",
-             static_cast<unsigned>(life_percent));
+    std::snprintf(usage_line + used, sizeof(usage_line) - used, " Life: %u%%",
+                  static_cast<unsigned>(life_percent));
   }
 
   show_text(uid_line, usage_line);

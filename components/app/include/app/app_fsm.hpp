@@ -26,7 +26,7 @@ class AppFsm {
  public:
   AppFsm() = default;
 
-  void reset(AppState &state, uint32_t now_ms) const;
+  void reset(AppState &state, uint32_t now_ms, const HardwareAvailability &hardware) const;
   bool handle_event(AppState &state, const RfidEvent &event) const;
   bool handle_event(AppState &state, const WeightEvent &event) const;
   bool handle_event(AppState &state, const ButtonEvent &event) const;

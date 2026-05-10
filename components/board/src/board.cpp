@@ -20,11 +20,6 @@
 
 namespace {
 SemaphoreHandle_t g_i2c_mutex = nullptr;
-
-bool probe_i2c_device(uint8_t addr) {
-  Wire.beginTransmission(addr);
-  return Wire.endTransmission() == 0;
-}
 }  // namespace
 
 namespace board {
@@ -36,6 +31,11 @@ void begin_i2c_mutex() {
 
 void begin_pn532_wire() {
   Wire.begin(kPn532SdaPin, kPn532SclPin);
+}
+
+bool probe_i2c_device(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
 }
 
 void log_i2c_scan() {

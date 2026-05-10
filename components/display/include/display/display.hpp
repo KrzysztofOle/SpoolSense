@@ -21,6 +21,9 @@ void begin();
 bool is_narrow();
 void show_boot_test();
 void show_text(const char *line1, const char *line2 = nullptr);
+void show_lines(const char *line1, const char *line2 = nullptr, const char *line3 = nullptr,
+                const char *line4 = nullptr);
+void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4);
 void append_line(const char *line);
 void show_card_removed();
 void show_uid_and_type(const uint8_t *uid, uint8_t uid_length);

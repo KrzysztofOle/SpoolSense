@@ -20,10 +20,12 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <stdint.h>
 
 #include "app/app_events.hpp"
 #include "app/app_fsm.hpp"
 #include "app/app_state.hpp"
+#include "board/buttons.hpp"
 
 namespace app {
 class App {
@@ -78,5 +80,7 @@ class App {
   QueueHandle_t hx711_command_queue_ = nullptr;
   QueueHandle_t ui_state_queue_ = nullptr;
   AppState app_state_{};
+  HardwareAvailability hardware_{};
+  board::ButtonController buttons_{};
 };
 }  // namespace app

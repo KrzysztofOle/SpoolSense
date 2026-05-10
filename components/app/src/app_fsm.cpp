@@ -26,30 +26,19 @@ namespace app {
 namespace {
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
 
-#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532) && CONFIG_SPOOLSENSE_IGNORE_MISSING_PN532
-constexpr bool kIgnoreMissingPn532 = true;
-#else
-constexpr bool kIgnoreMissingPn532 = false;
-#endif
-
-#if defined(CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711) && CONFIG_SPOOLSENSE_IGNORE_MISSING_HX711
-constexpr bool kIgnoreMissingHx711 = true;
-#else
-constexpr bool kIgnoreMissingHx711 = false;
-#endif
-
 void clear_uid(uint8_t *uid) {
   std::memset(uid, 0, kMaxRfidUidLength);
 }
 }  // namespace
 
-void AppFsm::reset(AppState &state, uint32_t now_ms) const {
+void AppFsm::reset(AppState &state, uint32_t now_ms, const HardwareAvailability &hardware) const {
   state = AppState{};
+  state.hardware = hardware;
   state.current_mode = AppMode::kBoot;
-  state.rfid_status = kIgnoreMissingPn532 ? RfidStatus::kWaitingForCard : RfidStatus::kBooting;
+  state.rfid_status = hardware.rfid_present ? RfidStatus::kBooting : RfidStatus::kReaderMissing;
 #if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
-  state.hx711_enabled = !kIgnoreMissingHx711;
-  state.hx711_status = kIgnoreMissingHx711 ? Hx711Status::kDisabled : Hx711Status::kBooting;
+  state.hx711_enabled = hardware.hx711_present;
+  state.hx711_status = hardware.hx711_present ? Hx711Status::kBooting : Hx711Status::kDisabled;
 #else
   state.hx711_enabled = false;
   state.hx711_status = Hx711Status::kDisabled;
@@ -75,13 +64,14 @@ void AppFsm::sync_mode(AppState &state) {
     return;
   }
 
-  if (state.rfid_status == RfidStatus::kReaderMissing || state.hx711_status == Hx711Status::kNotFound) {
+  if ((state.hardware.rfid_present && state.rfid_status == RfidStatus::kReaderMissing) ||
+      (state.hardware.hx711_present && state.hx711_status == Hx711Status::kNotFound)) {
     (void)transition_to(state, AppMode::kError);
     return;
   }
 
-  if (state.rfid_status == RfidStatus::kBooting ||
-      (state.hx711_enabled && state.hx711_status == Hx711Status::kBooting)) {
+  if ((state.hardware.rfid_present && state.rfid_status == RfidStatus::kBooting) ||
+      (state.hardware.hx711_present && state.hx711_status == Hx711Status::kBooting)) {
     (void)transition_to(state, AppMode::kBoot);
     return;
   }
@@ -186,14 +176,6 @@ bool AppFsm::handle_event(AppState &state, const WeightEvent &event) const {
 
   switch (event.kind) {
     case WeightEvent::Kind::kNotFound:
-      if (kIgnoreMissingHx711) {
-        state.hx711_enabled = false;
-        state.hx711_status = Hx711Status::kDisabled;
-        state.hx711_has_sample = false;
-        state.hx711_zeroed = false;
-        sync_mode(state);
-        return true;
-      }
       state.hx711_status = Hx711Status::kNotFound;
       state.hx711_has_sample = false;
       state.hx711_zeroed = false;
@@ -241,11 +223,12 @@ bool AppFsm::handle_timeouts(AppState &state, uint32_t now_ms) const {
     return false;
   }
 
-  if (state.rfid_status == RfidStatus::kBooting && now_ms - state.rfid_last_change_ms > kAppStartupTimeoutMs) {
+  if (state.hardware.rfid_present && state.rfid_status == RfidStatus::kBooting &&
+      now_ms - state.rfid_last_change_ms > kAppStartupTimeoutMs) {
     return transition_to(state, AppMode::kError);
   }
 
-  if (state.hx711_enabled && state.hx711_status == Hx711Status::kBooting &&
+  if (state.hardware.hx711_present && state.hx711_status == Hx711Status::kBooting &&
       now_ms - state.hx711_last_sample_ms > kAppStartupTimeoutMs) {
     return transition_to(state, AppMode::kError);
   }

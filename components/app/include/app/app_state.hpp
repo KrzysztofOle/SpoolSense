@@ -19,6 +19,12 @@
 #include "app/app_events.hpp"
 
 namespace app {
+struct HardwareAvailability {
+  bool rfid_present = false;
+  bool hx711_present = false;
+  bool axp192_present = false;
+};
+
 enum class AppMode : uint8_t {
   kBoot,
   kIdle,
@@ -44,6 +50,7 @@ enum class Hx711Status : uint8_t {
 };
 
 struct AppState {
+  HardwareAvailability hardware{};
   AppMode current_mode = AppMode::kBoot;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
@@ -68,6 +75,7 @@ struct AppState {
 };
 
 struct UiState {
+  HardwareAvailability hardware{};
   AppMode current_mode = AppMode::kBoot;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
