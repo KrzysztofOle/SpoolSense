@@ -34,6 +34,14 @@ enum class AppMode : uint8_t {
   kCalibration,
 };
 
+enum class UiScreen : uint8_t {
+  kHome,
+  kDiagnostics,
+  kScale,
+  kRfid,
+  kSettings,
+};
+
 enum class RfidStatus : uint8_t {
   kBooting,
   kReaderMissing,
@@ -52,6 +60,7 @@ enum class Hx711Status : uint8_t {
 struct AppState {
   HardwareAvailability hardware{};
   AppMode current_mode = AppMode::kBoot;
+  UiScreen active_screen = UiScreen::kHome;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
   bool hx711_enabled = true;
@@ -77,6 +86,7 @@ struct AppState {
 struct UiState {
   HardwareAvailability hardware{};
   AppMode current_mode = AppMode::kBoot;
+  UiScreen active_screen = UiScreen::kHome;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
   bool hx711_enabled = true;

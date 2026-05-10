@@ -53,6 +53,8 @@ class App {
   void ui_task_loop();
   void diagnostics_task_loop();
   void handle_button_input(AppState &state, bool &handled_event);
+  void handle_home_input(AppState &state, const ButtonEvent &event);
+  void handle_scale_input(AppState &state, const ButtonEvent &event);
   void start_tasks();
   void stop_tasks();
   void reset_state();

@@ -26,6 +26,11 @@ enum class ButtonKind : uint8_t {
   kC,
 };
 
+enum class ButtonAction : uint8_t {
+  kClick,
+  kLongPress,
+};
+
 struct RfidEvent {
   enum class Kind : uint8_t {
     kReaderMissing,
@@ -74,6 +79,7 @@ struct Hx711Command {
 
 struct ButtonEvent {
   ButtonKind kind = ButtonKind::kNone;
+  ButtonAction action = ButtonAction::kClick;
   uint32_t timestamp_ms = 0;
 };
 }  // namespace app

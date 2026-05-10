@@ -3,11 +3,11 @@
  *
  * Features (EN):
  * - Configures button pins for active-low input reading.
- * - Exposes a small helper for rising pressed edges.
+ * - Emits debounced click and long-press button events.
  *
  * Funkcje (PL):
  * - Konfiguruje piny przyciskow do odczytu aktywnego stanu niskiego.
- * - Udostepnia maly helper dla zbocza wcisniecia.
+ * - Generuje zdarzenia click i long-press z debouncingiem.
  *
  * File: components/board/src/buttons.cpp
  */
@@ -27,13 +27,14 @@ ButtonSnapshot read_buttons() {
   snapshot.c = gpio_get_level(static_cast<gpio_num_t>(kBtnCPin)) == 0;
   return snapshot;
 }
-
-bool is_pressed_edge(bool current, bool previous) {
-  return current && !previous;
 }
 }  // namespace
 
 void ButtonController::begin() {
+  button_a_ = {};
+  button_b_ = {};
+  button_c_ = {};
+
   gpio_config_t io_config = {};
   io_config.intr_type = GPIO_INTR_DISABLE;
   io_config.mode = GPIO_MODE_INPUT;
@@ -45,34 +46,45 @@ void ButtonController::begin() {
 
 ButtonEventBatch ButtonController::poll(uint32_t now_ms) {
   const ButtonSnapshot buttons = read_buttons();
-  const struct {
-    ButtonKind kind;
-    bool pressed;
-    bool previous;
-    uint32_t *last_action_ms;
-  } button_events[] = {
-      {ButtonKind::kA, buttons.a, previous_snapshot_.a, &last_action_a_ms_},
-      {ButtonKind::kB, buttons.b, previous_snapshot_.b, &last_action_b_ms_},
-      {ButtonKind::kC, buttons.c, previous_snapshot_.c, &last_action_c_ms_},
+  ButtonEventBatch batch{};
+  const auto process_button = [now_ms, &batch](ButtonKind kind, bool raw_pressed, ButtonState &state) {
+    if (raw_pressed != state.raw_pressed) {
+      state.raw_pressed = raw_pressed;
+      state.last_raw_change_ms = now_ms;
+      if (raw_pressed) {
+        state.pressed_since_ms = now_ms;
+        state.long_press_sent = false;
+      }
+    }
+
+    if (state.stable_pressed != state.raw_pressed &&
+        (now_ms - state.last_raw_change_ms) >= kDebounceMs) {
+      state.stable_pressed = state.raw_pressed;
+      if (!state.stable_pressed && !state.long_press_sent) {
+        if (batch.count < batch.events.size()) {
+          batch.events[batch.count].kind = kind;
+          batch.events[batch.count].action = ButtonAction::kClick;
+          batch.events[batch.count].timestamp_ms = now_ms;
+          ++batch.count;
+        }
+      }
+    }
+
+    if (state.stable_pressed && !state.long_press_sent &&
+        (now_ms - state.pressed_since_ms) >= kLongPressThresholdMs) {
+      if (batch.count < batch.events.size()) {
+        batch.events[batch.count].kind = kind;
+        batch.events[batch.count].action = ButtonAction::kLongPress;
+        batch.events[batch.count].timestamp_ms = now_ms;
+        ++batch.count;
+        state.long_press_sent = true;
+      }
+    }
   };
 
-  ButtonEventBatch batch{};
-  for (const auto &button_event : button_events) {
-    if (!is_pressed_edge(button_event.pressed, button_event.previous)) {
-      continue;
-    }
-
-    if ((now_ms - *button_event.last_action_ms) < kDebounceMs) {
-      continue;
-    }
-
-    *button_event.last_action_ms = now_ms;
-    batch.events[batch.count].kind = button_event.kind;
-    batch.events[batch.count].timestamp_ms = now_ms;
-    ++batch.count;
-  }
-
-  previous_snapshot_ = buttons;
+  process_button(ButtonKind::kA, buttons.a, button_a_);
+  process_button(ButtonKind::kB, buttons.b, button_b_);
+  process_button(ButtonKind::kC, buttons.c, button_c_);
   return batch;
 }
 }  // namespace board

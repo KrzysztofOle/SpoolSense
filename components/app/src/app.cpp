@@ -46,6 +46,17 @@ ButtonKind to_app_button_kind(board::ButtonKind kind) {
   return ButtonKind::kNone;
 }
 
+ButtonAction to_app_button_action(board::ButtonAction action) {
+  switch (action) {
+    case board::ButtonAction::kClick:
+      return ButtonAction::kClick;
+    case board::ButtonAction::kLongPress:
+      return ButtonAction::kLongPress;
+  }
+
+  return ButtonAction::kClick;
+}
+
 struct StartupProbe {
   HardwareAvailability hardware{};
 };
@@ -107,6 +118,7 @@ UiState to_ui_state(const AppState &state) {
   UiState ui_state{};
   ui_state.hardware = state.hardware;
   ui_state.current_mode = state.current_mode;
+  ui_state.active_screen = state.active_screen;
   ui_state.rfid_status = state.rfid_status;
   ui_state.hx711_status = state.hx711_status;
   ui_state.hx711_enabled = state.hx711_enabled;
@@ -134,6 +146,7 @@ UiState to_ui_state(const AppState &state) {
 
 bool same_state(const UiState &lhs, const UiState &rhs) {
   return lhs.current_mode == rhs.current_mode && lhs.rfid_status == rhs.rfid_status &&
+         lhs.active_screen == rhs.active_screen &&
          lhs.hx711_status == rhs.hx711_status && lhs.hx711_enabled == rhs.hx711_enabled &&
          lhs.rfid_has_uid == rhs.rfid_has_uid &&
          lhs.rfid_usage_available == rhs.rfid_usage_available &&
@@ -170,6 +183,17 @@ const char *button_text(ButtonKind kind) {
   }
 
   return "unknown";
+}
+
+const char *button_action_text(ButtonAction action) {
+  switch (action) {
+    case ButtonAction::kClick:
+      return "clicked";
+    case ButtonAction::kLongPress:
+      return "long-pressed";
+  }
+
+  return "acted";
 }
 
 const char *button_short_text(ButtonKind kind) {
@@ -317,7 +341,7 @@ void log_button_event_effects(const AppState &after_state, const ButtonEvent &ev
   }
 
   char line[32] = {};
-  std::snprintf(line, sizeof(line), "%s clicked", button_text(event.kind));
+  std::snprintf(line, sizeof(line), "%s %s", button_text(event.kind), button_action_text(event.action));
   diagnostics::log_line(line);
 
   if (after_state.last_button != ButtonKind::kNone) {
@@ -811,25 +835,40 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
 
     ButtonEvent event{};
     event.kind = to_app_button_kind(button_event.kind);
+    event.action = to_app_button_action(button_event.action);
     event.timestamp_ms = button_event.timestamp_ms;
 
     const AppState before_state = state;
     fsm_.handle_event(state, event);
     log_button_event_effects(state, event);
 
-    if (event.kind == ButtonKind::kA && state.hx711_enabled) {
-      Hx711Command command{};
-      command.kind = Hx711Command::Kind::kZero;
-      command.timestamp_ms = button_event.timestamp_ms;
-      if (!publish_hx711_command(command)) {
-        diagnostics::log_line("HX711 zero request dropped");
-      }
+    switch (state.active_screen) {
+      case UiScreen::kHome:
+        handle_home_input(state, event);
+        break;
+
+      case UiScreen::kScale:
+        handle_scale_input(state, event);
+        break;
+
+      default:
+        break;
     }
 
     if (before_state.last_button != state.last_button || before_state.last_button_ms != state.last_button_ms) {
       handled_event = true;
     }
   }
+}
+
+void App::handle_home_input(AppState &state, const ButtonEvent &event) {
+  (void)state;
+  (void)event;
+}
+
+void App::handle_scale_input(AppState &state, const ButtonEvent &event) {
+  (void)state;
+  (void)event;
 }
 
 void App::app_task_entry(void *arg) {

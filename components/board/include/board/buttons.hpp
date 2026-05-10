@@ -4,10 +4,12 @@
  * Features (EN):
  * - Configures the board buttons as pulled-up GPIO inputs.
  * - Reads the current pressed state of the hardware buttons.
+ * - Emits click and long-press button events.
  *
  * Funkcje (PL):
  * - Konfiguruje przyciski plytki jako wejscia GPIO z pull-up.
  * - Odczytuje aktualny stan wcisniecia przyciskow sprzetowych.
+ * - Generuje zdarzenia click i long-press.
  *
  * File: components/board/include/board/buttons.hpp
  */
@@ -26,8 +28,14 @@ enum class ButtonKind : uint8_t {
   kC,
 };
 
+enum class ButtonAction : uint8_t {
+  kClick,
+  kLongPress,
+};
+
 struct ButtonEvent {
   ButtonKind kind = ButtonKind::kNone;
+  ButtonAction action = ButtonAction::kClick;
   uint32_t timestamp_ms = 0;
 };
 
@@ -51,10 +59,18 @@ class ButtonController {
 
  private:
   static constexpr uint32_t kDebounceMs = 250U;
+  static constexpr uint32_t kLongPressThresholdMs = 700U;
 
-  ButtonSnapshot previous_snapshot_{};
-  uint32_t last_action_a_ms_ = 0;
-  uint32_t last_action_b_ms_ = 0;
-  uint32_t last_action_c_ms_ = 0;
+  struct ButtonState {
+    bool raw_pressed = false;
+    bool stable_pressed = false;
+    uint32_t last_raw_change_ms = 0;
+    uint32_t pressed_since_ms = 0;
+    bool long_press_sent = false;
+  };
+
+  ButtonState button_a_{};
+  ButtonState button_b_{};
+  ButtonState button_c_{};
 };
 }  // namespace board
