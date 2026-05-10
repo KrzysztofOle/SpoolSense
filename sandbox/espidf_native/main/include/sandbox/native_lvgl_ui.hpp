@@ -1,0 +1,46 @@
+/**
+ * Native LVGL UI layer for the sandbox app.
+ *
+ * Features (EN):
+ * - Initializes LVGL with a native ESP-IDF LCD backend.
+ * - Renders a compact status UI with button states and counters.
+ * - Exposes a lightweight update loop for the main runtime.
+ *
+ * Funkcje (PL):
+ * - Inicjalizuje LVGL z natywnym backendem LCD dla ESP-IDF.
+ * - Renderuje kompaktowy UI ze stanem przyciskow i licznikami.
+ * - Udostepnia lekka petle aktualizacji dla glownego runtime.
+ *
+ * File: sandbox/espidf_native/main/include/sandbox/native_lvgl_ui.hpp
+ */
+
+#pragma once
+
+#include <cstdint>
+
+#include "sandbox/native_input.hpp"
+#include "sandbox/native_lcd.hpp"
+
+namespace sandbox {
+struct ButtonCounters {
+  uint32_t a = 0;
+  uint32_t b = 0;
+  uint32_t c = 0;
+};
+
+class NativeLvglUi {
+ public:
+  bool begin(NativeLcd *lcd);
+  void update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms);
+  void tick(uint32_t elapsed_ms);
+  void process();
+
+ private:
+  NativeLcd *lcd_ = nullptr;
+  void *disp_ = nullptr;
+  void *title_ = nullptr;
+  void *buttons_ = nullptr;
+  void *counters_ = nullptr;
+  void *uptime_ = nullptr;
+};
+}  // namespace sandbox

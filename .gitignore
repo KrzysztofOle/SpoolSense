@@ -17,7 +17,7 @@ sandbox/**/sdkconfig.old
 sandbox/**/sdkconfig.ci
 sandbox/**/sdkconfig.*.old
 sandbox/espidf/components/
-sandbox/espidf/managed_components/
+sandbox/**/managed_components/
 
 # Local ESP-IDF component manager cache, with explicit exceptions for
 # compatibility patches that must remain visible in the workspace.

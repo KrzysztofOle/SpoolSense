@@ -25,8 +25,7 @@
 #include "freertos/task.h"
 #include "sandbox/native_input.hpp"
 #include "sandbox/native_lcd.hpp"
-#include "sandbox/native_renderer.hpp"
-#include "sandbox/native_screens.hpp"
+#include "sandbox/native_lvgl_ui.hpp"
 
 namespace sandbox {
 namespace {
@@ -46,72 +45,53 @@ void NativeApp::run() {
     return;
   }
 
-  ScreenMode current_screen = ScreenMode::kWelcome;
+  NativeLvglUi ui;
+  if (!ui.begin(&lcd)) {
+    ESP_LOGE("sandbox", "LVGL init failed");
+    return;
+  }
+
   ButtonSnapshot last_buttons{};
   bool have_last_buttons = false;
   ButtonCounters click_counters{};
   uint32_t boot_ms = millis_now();
-  uint32_t frame_count = 0;
-  uint32_t last_rendered_animation_tick = UINT32_MAX;
-  bool dirty = true;
-
-  std::array<uint16_t, NativeLcd::kWidth> line{};
+  uint32_t last_loop_ms = boot_ms;
+  uint32_t last_log_ms = boot_ms;
 
   for (;;) {
     const uint32_t now_ms = millis_now();
     const uint32_t elapsed_ms = now_ms - boot_ms;
-    const uint32_t animation_tick = elapsed_ms / 120U;
+    const uint32_t delta_ms = now_ms - last_loop_ms;
+    last_loop_ms = now_ms;
 
     const ButtonSnapshot buttons = read_buttons();
     if (!have_last_buttons || buttons.a != last_buttons.a || buttons.b != last_buttons.b ||
         buttons.c != last_buttons.c) {
       if (is_pressed_edge(buttons.a, last_buttons.a)) {
         ++click_counters.a;
-        current_screen = ScreenMode::kWelcome;
-        dirty = true;
       }
       if (is_pressed_edge(buttons.b, last_buttons.b)) {
         ++click_counters.b;
-        current_screen = ScreenMode::kStatus;
-        dirty = true;
       }
       if (is_pressed_edge(buttons.c, last_buttons.c)) {
         ++click_counters.c;
-        current_screen = ScreenMode::kButtons;
-        dirty = true;
-      }
-      if (buttons.a && buttons.b && !last_buttons.a && !last_buttons.b) {
-        current_screen = ScreenMode::kMenu;
-        dirty = true;
       }
       last_buttons = buttons;
       have_last_buttons = true;
     }
 
-    if (dirty || animation_tick != last_rendered_animation_tick) {
-      const std::array<RenderLine, 4> lines =
-          build_lines(current_screen, elapsed_ms, frame_count, buttons, click_counters);
-      ESP_LOGI("sandbox", "render screen=%s uptime=%lu frame=%lu", screen_name(current_screen),
-               static_cast<unsigned long>(elapsed_ms / 1000U), static_cast<unsigned long>(frame_count));
-
-      for (int y = 0; y < NativeLcd::kHeight; ++y) {
-        render_scanline(lines, y, animation_tick, line.data());
-        if (lcd.send_line(y, line.data()) != ESP_OK) {
-          ESP_LOGE("sandbox", "LCD transfer failed at line %d", y);
-          break;
-        }
-        if (!lcd.wait_tx_done()) {
-          ESP_LOGE("sandbox", "LCD transfer timeout at line %d", y);
-          break;
-        }
-      }
-
-      last_rendered_animation_tick = animation_tick;
-      dirty = false;
-      ++frame_count;
+    if ((now_ms - last_log_ms) >= 2000U) {
+      ESP_LOGI("sandbox", "lvgl uptime=%lus A:%lu B:%lu C:%lu", static_cast<unsigned long>(elapsed_ms / 1000U),
+               static_cast<unsigned long>(click_counters.a), static_cast<unsigned long>(click_counters.b),
+               static_cast<unsigned long>(click_counters.c));
+      last_log_ms = now_ms;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(50));
+    ui.tick(delta_ms);
+    ui.update(buttons, click_counters, elapsed_ms);
+    ui.process();
+
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 }  // namespace sandbox

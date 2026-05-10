@@ -93,7 +93,7 @@ esp_err_t NativeLcd::begin() {
   buscfg.miso_io_num = k_lcd_pin_miso;
   buscfg.quadwp_io_num = -1;
   buscfg.quadhd_io_num = -1;
-  buscfg.max_transfer_sz = kWidth * 2;
+  buscfg.max_transfer_sz = kWidth * 40 * 2;
 
   ESP_RETURN_ON_ERROR(spi_bus_initialize(k_lcd_host, &buscfg, SPI_DMA_CH_AUTO), "sandbox",
                       "spi_bus_initialize failed");
@@ -121,7 +121,7 @@ esp_err_t NativeLcd::begin() {
   static const uint8_t gamma_neg[] = {0x00, 0x0B, 0x11, 0x05, 0x13, 0x09, 0x33, 0x67, 0x48, 0x07,
                                       0x0E, 0x0B, 0x2E, 0x33, 0x0F};
   static const uint8_t dfunctr[] = {0x08, 0x82, 0x1D, 0x04};
-  static const uint8_t madctl[] = {0x08};
+  static const uint8_t madctl[] = {0x00};
   static const uint8_t colmod[] = {0x55};
   static const uint8_t pwr_ctrl[] = {0x01, 0x00, 0x00};
 
@@ -140,6 +140,7 @@ esp_err_t NativeLcd::begin() {
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xB6, dfunctr, sizeof(dfunctr)), "sandbox", "DFUNCTR failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x3A, colmod, sizeof(colmod)), "sandbox", "COLMOD failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x36, madctl, sizeof(madctl)), "sandbox", "MADCTL failed");
+  ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x20), "sandbox", "INVOFF failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x29), "sandbox", "DISPON failed");
   lcd_delay_ms(20);
 
@@ -147,22 +148,29 @@ esp_err_t NativeLcd::begin() {
 }
 
 esp_err_t NativeLcd::send_line(int y, const uint16_t *line) {
+  return send_area(0, y, kWidth - 1, y, line);
+}
+
+esp_err_t NativeLcd::send_area(int x1, int y1, int x2, int y2, const uint16_t *pixels) {
   uint8_t column_data[4];
-  column_data[0] = 0;
-  column_data[1] = 0;
-  column_data[2] = static_cast<uint8_t>((kWidth - 1) >> 8);
-  column_data[3] = static_cast<uint8_t>((kWidth - 1) & 0xFF);
+  column_data[0] = static_cast<uint8_t>(x1 >> 8);
+  column_data[1] = static_cast<uint8_t>(x1 & 0xFF);
+  column_data[2] = static_cast<uint8_t>(x2 >> 8);
+  column_data[3] = static_cast<uint8_t>(x2 & 0xFF);
 
   uint8_t row_data[4];
-  row_data[0] = static_cast<uint8_t>(y >> 8);
-  row_data[1] = static_cast<uint8_t>(y & 0xFF);
-  row_data[2] = static_cast<uint8_t>(y >> 8);
-  row_data[3] = static_cast<uint8_t>(y & 0xFF);
+  row_data[0] = static_cast<uint8_t>(y1 >> 8);
+  row_data[1] = static_cast<uint8_t>(y1 & 0xFF);
+  row_data[2] = static_cast<uint8_t>(y2 >> 8);
+  row_data[3] = static_cast<uint8_t>(y2 & 0xFF);
 
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x2A, column_data, sizeof(column_data)), "sandbox",
                       "CASET failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x2B, row_data, sizeof(row_data)), "sandbox", "PASET failed");
-  return esp_lcd_panel_io_tx_color(io_handle_, 0x2C, line, kWidth * sizeof(uint16_t));
+  const int width = x2 - x1 + 1;
+  const int height = y2 - y1 + 1;
+  const size_t payload_size = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(uint16_t);
+  return esp_lcd_panel_io_tx_color(io_handle_, 0x2C, pixels, payload_size);
 }
 
 bool NativeLcd::wait_tx_done() {

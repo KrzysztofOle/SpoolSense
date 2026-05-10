@@ -29,6 +29,7 @@ class NativeLcd {
 
   esp_err_t begin();
   esp_err_t send_line(int y, const uint16_t *line);
+  esp_err_t send_area(int x1, int y1, int x2, int y2, const uint16_t *pixels);
   bool wait_tx_done();
 
  private:
