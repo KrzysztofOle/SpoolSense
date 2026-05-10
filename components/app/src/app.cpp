@@ -278,6 +278,32 @@ const char *button_text(ButtonKind kind) {
   return "unknown";
 }
 
+UiScreen next_screen(UiScreen screen) {
+  switch (screen) {
+    case UiScreen::kHome:
+      return UiScreen::kDiagnostics;
+    case UiScreen::kDiagnostics:
+      return UiScreen::kScale;
+    case UiScreen::kScale:
+      return UiScreen::kHome;
+    default:
+      return UiScreen::kHome;
+  }
+}
+
+UiScreen previous_screen(UiScreen screen) {
+  switch (screen) {
+    case UiScreen::kHome:
+      return UiScreen::kScale;
+    case UiScreen::kDiagnostics:
+      return UiScreen::kHome;
+    case UiScreen::kScale:
+      return UiScreen::kDiagnostics;
+    default:
+      return UiScreen::kHome;
+  }
+}
+
 const char *button_action_text(ButtonAction action) {
   switch (action) {
     case ButtonAction::kClick:
@@ -476,14 +502,38 @@ void log_timeout_effects(const AppState &before_state, const AppState &after_sta
 }
 
 void render_state(const UiState &state) {
-  display::HomeSnapshot snapshot{};
-  std::memcpy(snapshot.material, state.spool.material, sizeof(snapshot.material));
-  std::memcpy(snapshot.color, state.spool.color, sizeof(snapshot.color));
-  snapshot.current_weight_g = state.spool.current_weight_g;
-  snapshot.reference_full_weight_g = state.spool.reference_full_weight_g;
-  snapshot.used_weight_g = state.spool.used_weight_g;
-  snapshot.remaining_percent = state.spool.remaining_percent;
-  display::render_home(snapshot);
+  display::UiSnapshot snapshot{};
+  switch (state.active_screen) {
+    case UiScreen::kHome:
+      snapshot.screen = display::UiScreen::kHome;
+      break;
+    case UiScreen::kDiagnostics:
+      snapshot.screen = display::UiScreen::kDiagnostics;
+      break;
+    case UiScreen::kScale:
+      snapshot.screen = display::UiScreen::kScale;
+      break;
+    default:
+      snapshot.screen = display::UiScreen::kHome;
+      break;
+  }
+
+  std::memcpy(snapshot.home.material, state.spool.material, sizeof(snapshot.home.material));
+  std::memcpy(snapshot.home.color, state.spool.color, sizeof(snapshot.home.color));
+  snapshot.home.current_weight_g = state.spool.current_weight_g;
+  snapshot.home.reference_full_weight_g = state.spool.reference_full_weight_g;
+  snapshot.home.used_weight_g = state.spool.used_weight_g;
+  snapshot.home.remaining_percent = state.spool.remaining_percent;
+
+  snapshot.diagnostics.hx711 = static_cast<uint8_t>(state.diagnostics.hx711);
+  snapshot.diagnostics.pn532 = static_cast<uint8_t>(state.diagnostics.pn532);
+  snapshot.diagnostics.display = static_cast<uint8_t>(state.diagnostics.display);
+  snapshot.diagnostics.i2c = static_cast<uint8_t>(state.diagnostics.i2c);
+
+  snapshot.scale.current_weight_g = state.spool.current_weight_g;
+  snapshot.scale.reference_full_weight_g = state.spool.reference_full_weight_g;
+
+  display::render(snapshot);
 }
 }  // namespace
 
@@ -798,6 +848,9 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
       case UiScreen::kHome:
         handle_home_input(state, event);
         break;
+      case UiScreen::kDiagnostics:
+        handle_diagnostics_input(state, event);
+        break;
 
       case UiScreen::kScale:
         handle_scale_input(state, event);
@@ -810,17 +863,46 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
     if (before_state.last_button != state.last_button || before_state.last_button_ms != state.last_button_ms) {
       handled_event = true;
     }
+    if (before_state.active_screen != state.active_screen) {
+      handled_event = true;
+    }
   }
 }
 
 void App::handle_home_input(AppState &state, const ButtonEvent &event) {
-  (void)state;
-  (void)event;
+  if (event.action != ButtonAction::kClick) {
+    return;
+  }
+
+  if (event.kind == ButtonKind::kA) {
+    state.active_screen = previous_screen(state.active_screen);
+  } else if (event.kind == ButtonKind::kC) {
+    state.active_screen = next_screen(state.active_screen);
+  }
+}
+
+void App::handle_diagnostics_input(AppState &state, const ButtonEvent &event) {
+  if (event.action != ButtonAction::kClick) {
+    return;
+  }
+
+  if (event.kind == ButtonKind::kA) {
+    state.active_screen = previous_screen(state.active_screen);
+  } else if (event.kind == ButtonKind::kC) {
+    state.active_screen = next_screen(state.active_screen);
+  }
 }
 
 void App::handle_scale_input(AppState &state, const ButtonEvent &event) {
-  (void)state;
-  (void)event;
+  if (event.action != ButtonAction::kClick) {
+    return;
+  }
+
+  if (event.kind == ButtonKind::kA) {
+    state.active_screen = previous_screen(state.active_screen);
+  } else if (event.kind == ButtonKind::kC) {
+    state.active_screen = next_screen(state.active_screen);
+  }
 }
 
 void App::app_task_entry(void *arg) {

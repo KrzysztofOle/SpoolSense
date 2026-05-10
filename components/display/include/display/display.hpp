@@ -17,6 +17,12 @@
 #include <stdint.h>
 
 namespace display {
+enum class UiScreen : uint8_t {
+  kHome = 0,
+  kDiagnostics = 1,
+  kScale = 2,
+};
+
 struct HomeSnapshot {
   char material[12] = {};
   char color[16] = {};
@@ -24,6 +30,25 @@ struct HomeSnapshot {
   int32_t reference_full_weight_g = 0;
   int32_t used_weight_g = 0;
   uint8_t remaining_percent = 0;
+};
+
+struct DiagnosticsSnapshot {
+  uint8_t hx711 = 0;
+  uint8_t pn532 = 0;
+  uint8_t display = 0;
+  uint8_t i2c = 0;
+};
+
+struct ScaleSnapshot {
+  int32_t current_weight_g = 0;
+  int32_t reference_full_weight_g = 0;
+};
+
+struct UiSnapshot {
+  UiScreen screen = UiScreen::kHome;
+  HomeSnapshot home{};
+  DiagnosticsSnapshot diagnostics{};
+  ScaleSnapshot scale{};
 };
 
 void begin();
@@ -34,6 +59,7 @@ void show_lines(const char *line1, const char *line2 = nullptr, const char *line
                 const char *line4 = nullptr);
 void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4);
 void render_home(const HomeSnapshot &snapshot);
+void render(const UiSnapshot &snapshot);
 void append_line(const char *line);
 void show_card_removed();
 void show_uid_and_type(const uint8_t *uid, uint8_t uid_length);

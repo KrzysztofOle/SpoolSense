@@ -64,6 +64,15 @@ constexpr lv_coord_t k_home_bar_y = 170;
 constexpr lv_coord_t k_home_bar_w = 296;
 constexpr lv_coord_t k_home_bar_h = 24;
 constexpr lv_coord_t k_home_bar_text_y = 200;
+constexpr lv_coord_t k_diag_title_y = 8;
+constexpr lv_coord_t k_diag_line_1_y = 46;
+constexpr lv_coord_t k_diag_line_2_y = 82;
+constexpr lv_coord_t k_diag_line_3_y = 118;
+constexpr lv_coord_t k_diag_line_4_y = 154;
+constexpr lv_coord_t k_scale_title_y = 8;
+constexpr lv_coord_t k_scale_line_1_y = 56;
+constexpr lv_coord_t k_scale_line_2_y = 96;
+constexpr lv_coord_t k_scale_line_3_y = 160;
 constexpr char k_empty_line[] = "";
 constexpr size_t k_max_line_length = 128;
 constexpr int k_draw_buffer_lines = 30;
@@ -305,6 +314,8 @@ class NativeDisplay {
     kRegular,
     kDiagnostic,
     kHome,
+    kDiagnostics,
+    kScale,
   };
 
   bool begin() {
@@ -367,21 +378,42 @@ class NativeDisplay {
   }
 
   void render_home(const HomeSnapshot &snapshot) {
+    UiSnapshot ui_snapshot{};
+    ui_snapshot.screen = UiScreen::kHome;
+    ui_snapshot.home = snapshot;
+    render(ui_snapshot);
+  }
+
+  void render(const UiSnapshot &snapshot) {
     if (!configured_) {
       return;
     }
 
-    if (has_home_snapshot_ && is_same_home_snapshot(snapshot, last_home_snapshot_)) {
+    if (has_ui_snapshot_ && is_same_ui_snapshot(snapshot, last_ui_snapshot_)) {
       ui_dirty_ = false;
       return;
     }
 
-    last_home_snapshot_ = snapshot;
-    has_home_snapshot_ = true;
+    last_ui_snapshot_ = snapshot;
+    has_ui_snapshot_ = true;
     ui_dirty_ = true;
 
-    ensure_style(ScreenStyle::kHome);
-    refresh_home(snapshot);
+    switch (snapshot.screen) {
+      case UiScreen::kHome:
+        ensure_style(ScreenStyle::kHome);
+        refresh_home(snapshot.home);
+        break;
+      case UiScreen::kDiagnostics:
+        ensure_style(ScreenStyle::kDiagnostics);
+        refresh_diagnostics(snapshot.diagnostics);
+        break;
+      case UiScreen::kScale:
+        ensure_style(ScreenStyle::kScale);
+        refresh_scale(snapshot.scale);
+        break;
+      default:
+        break;
+    }
   }
 
   void append_line(const char *line) {
@@ -451,6 +483,14 @@ class NativeDisplay {
 
     if (style == ScreenStyle::kHome) {
       build_home_screen(scr);
+      return;
+    }
+    if (style == ScreenStyle::kDiagnostics) {
+      build_diagnostics_screen(scr);
+      return;
+    }
+    if (style == ScreenStyle::kScale) {
+      build_scale_screen(scr);
       return;
     }
 
@@ -562,6 +602,100 @@ class NativeDisplay {
     ui_dirty_ = false;
   }
 
+  void build_diagnostics_screen(lv_obj_t *scr) {
+    diagnostics_title_label_ = lv_label_create(scr);
+    lv_obj_set_style_text_color(diagnostics_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(diagnostics_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_pos(diagnostics_title_label_, k_line_x, k_diag_title_y);
+
+    for (size_t index = 0; index < diagnostics_labels_.size(); ++index) {
+      diagnostics_labels_[index] = lv_label_create(scr);
+      lv_obj_set_style_text_color(diagnostics_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(diagnostics_labels_[index], &lv_font_montserrat_20, LV_PART_MAIN);
+      lv_obj_set_style_text_align(diagnostics_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+      lv_obj_set_width(diagnostics_labels_[index], NativeLcd::kWidth - 24);
+      const lv_coord_t y = index == 0 ? k_diag_line_1_y
+                           : index == 1 ? k_diag_line_2_y
+                           : index == 2 ? k_diag_line_3_y
+                                        : k_diag_line_4_y;
+      lv_obj_set_pos(diagnostics_labels_[index], k_line_x, y);
+    }
+  }
+
+  void refresh_diagnostics(const DiagnosticsSnapshot &snapshot) {
+    if (!ui_dirty_) {
+      return;
+    }
+
+    lv_label_set_text(diagnostics_title_label_, "Diagnostics");
+    char line[48] = {};
+    std::snprintf(line, sizeof(line), "HX711     %s", health_text(snapshot.hx711));
+    lv_label_set_text(diagnostics_labels_[0], line);
+    std::snprintf(line, sizeof(line), "PN532     %s", health_text(snapshot.pn532));
+    lv_label_set_text(diagnostics_labels_[1], line);
+    std::snprintf(line, sizeof(line), "DISPLAY   %s", health_text(snapshot.display));
+    lv_label_set_text(diagnostics_labels_[2], line);
+    std::snprintf(line, sizeof(line), "I2C       %s", health_text(snapshot.i2c));
+    lv_label_set_text(diagnostics_labels_[3], line);
+
+    lv_timer_handler();
+    lv_refr_now(nullptr);
+    ui_dirty_ = false;
+  }
+
+  void build_scale_screen(lv_obj_t *scr) {
+    scale_title_label_ = lv_label_create(scr);
+    lv_obj_set_style_text_color(scale_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(scale_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_pos(scale_title_label_, k_line_x, k_scale_title_y);
+
+    for (size_t index = 0; index < scale_labels_.size(); ++index) {
+      scale_labels_[index] = lv_label_create(scr);
+      lv_obj_set_style_text_color(scale_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(scale_labels_[index], &lv_font_montserrat_20, LV_PART_MAIN);
+      lv_obj_set_style_text_align(scale_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+      lv_obj_set_width(scale_labels_[index], NativeLcd::kWidth - 24);
+      const lv_coord_t y = index == 0 ? k_scale_line_1_y : (index == 1 ? k_scale_line_2_y : k_scale_line_3_y);
+      lv_obj_set_pos(scale_labels_[index], k_line_x, y);
+    }
+  }
+
+  void refresh_scale(const ScaleSnapshot &snapshot) {
+    if (!ui_dirty_) {
+      return;
+    }
+
+    lv_label_set_text(scale_title_label_, "Scale");
+    char line[64] = {};
+    std::snprintf(line, sizeof(line), "Weight: %ld g", static_cast<long>(snapshot.current_weight_g));
+    lv_label_set_text(scale_labels_[0], line);
+    std::snprintf(line, sizeof(line), "Ref:    %ld g", static_cast<long>(snapshot.reference_full_weight_g));
+    lv_label_set_text(scale_labels_[1], line);
+    lv_label_set_text(scale_labels_[2], "A: Tara  B: Save Ref");
+
+    lv_timer_handler();
+    lv_refr_now(nullptr);
+    ui_dirty_ = false;
+  }
+
+  static const char *health_text(uint8_t health) {
+    switch (health) {
+      case 2:
+        return "OK";
+      case 3:
+        return "WARN";
+      case 4:
+        return "ERR";
+      case 5:
+        return "MISS";
+      case 1:
+        return "INIT";
+      case 0:
+      default:
+        return "UNK";
+    }
+  }
+
   static bool is_same_home_snapshot(const HomeSnapshot &lhs, const HomeSnapshot &rhs) {
     return std::memcmp(lhs.material, rhs.material, sizeof(lhs.material)) == 0 &&
            std::memcmp(lhs.color, rhs.color, sizeof(lhs.color)) == 0 &&
@@ -569,6 +703,33 @@ class NativeDisplay {
            lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
            lhs.used_weight_g == rhs.used_weight_g &&
            lhs.remaining_percent == rhs.remaining_percent;
+  }
+
+  static bool is_same_diagnostics_snapshot(const DiagnosticsSnapshot &lhs, const DiagnosticsSnapshot &rhs) {
+    return lhs.hx711 == rhs.hx711 && lhs.pn532 == rhs.pn532 && lhs.display == rhs.display &&
+           lhs.i2c == rhs.i2c;
+  }
+
+  static bool is_same_scale_snapshot(const ScaleSnapshot &lhs, const ScaleSnapshot &rhs) {
+    return lhs.current_weight_g == rhs.current_weight_g &&
+           lhs.reference_full_weight_g == rhs.reference_full_weight_g;
+  }
+
+  static bool is_same_ui_snapshot(const UiSnapshot &lhs, const UiSnapshot &rhs) {
+    if (lhs.screen != rhs.screen) {
+      return false;
+    }
+
+    switch (lhs.screen) {
+      case UiScreen::kHome:
+        return is_same_home_snapshot(lhs.home, rhs.home);
+      case UiScreen::kDiagnostics:
+        return is_same_diagnostics_snapshot(lhs.diagnostics, rhs.diagnostics);
+      case UiScreen::kScale:
+        return is_same_scale_snapshot(lhs.scale, rhs.scale);
+      default:
+        return false;
+    }
   }
 
   void sync_time() {
@@ -591,14 +752,18 @@ class NativeDisplay {
   bool have_tick_ = false;
   bool configured_ = false;
   bool ui_dirty_ = false;
-  bool has_home_snapshot_ = false;
+  bool has_ui_snapshot_ = false;
   ScreenStyle screen_style_ = ScreenStyle::kRegular;
-  HomeSnapshot last_home_snapshot_{};
+  UiSnapshot last_ui_snapshot_{};
   lv_obj_t *home_title_label_ = nullptr;
   std::array<lv_obj_t *, 4> home_info_labels_ = {nullptr, nullptr, nullptr, nullptr};
   lv_obj_t *home_bar_bg_ = nullptr;
   lv_obj_t *home_bar_fill_ = nullptr;
   lv_obj_t *home_remain_label_ = nullptr;
+  lv_obj_t *diagnostics_title_label_ = nullptr;
+  std::array<lv_obj_t *, 4> diagnostics_labels_ = {nullptr, nullptr, nullptr, nullptr};
+  lv_obj_t *scale_title_label_ = nullptr;
+  std::array<lv_obj_t *, 3> scale_labels_ = {nullptr, nullptr, nullptr};
   static lv_color_t draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 };
 
@@ -642,6 +807,10 @@ void show_diagnostics(const char *line1, const char *line2, const char *line3, c
 
 void render_home(const HomeSnapshot &snapshot) {
   display_device().render_home(snapshot);
+}
+
+void render(const UiSnapshot &snapshot) {
+  display_device().render(snapshot);
 }
 
 void append_line(const char *line) {
