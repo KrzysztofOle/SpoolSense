@@ -114,6 +114,80 @@ int32_t raw_to_grams(long raw_value) {
   return static_cast<int32_t>(std::lround(static_cast<double>(raw_value) / kHx711CountsPerGram));
 }
 
+void update_spool_metrics_for_state(AppState &state) {
+  const int32_t reference_full_weight_g = state.spool.reference_full_weight_g;
+  const int32_t current_weight_g = state.hx711_has_sample ? state.hx711_weight_grams : 0;
+  const int32_t clamped_current_weight_g = current_weight_g < 0 ? 0 : current_weight_g;
+
+  state.spool.current_weight_g = current_weight_g;
+  if (reference_full_weight_g > clamped_current_weight_g) {
+    state.spool.used_weight_g = reference_full_weight_g - clamped_current_weight_g;
+  } else {
+    state.spool.used_weight_g = 0;
+  }
+
+  if (reference_full_weight_g <= 0) {
+    state.spool.valid = false;
+    state.spool.remaining_percent = 0;
+    return;
+  }
+
+  state.spool.valid = true;
+  const double remaining_percent =
+      (static_cast<double>(clamped_current_weight_g) / static_cast<double>(reference_full_weight_g)) * 100.0;
+  long rounded_percent = std::lround(remaining_percent);
+  if (rounded_percent < 0) {
+    rounded_percent = 0;
+  } else if (rounded_percent > 100) {
+    rounded_percent = 100;
+  }
+
+  state.spool.remaining_percent = static_cast<uint8_t>(rounded_percent);
+}
+
+ModuleHealth to_module_health(bool present, ModuleHealth when_present, ModuleHealth when_missing = ModuleHealth::kMissing) {
+  return present ? when_present : when_missing;
+}
+
+DiagnosticsState to_diagnostics_state(const AppState &state) {
+  DiagnosticsState diagnostics{};
+  diagnostics.hx711 = to_module_health(state.hardware.hx711_present, [&state]() -> ModuleHealth {
+    switch (state.hx711_status) {
+      case Hx711Status::kBooting:
+        return ModuleHealth::kInit;
+      case Hx711Status::kDisabled:
+        return ModuleHealth::kMissing;
+      case Hx711Status::kNotFound:
+        return ModuleHealth::kError;
+      case Hx711Status::kReady:
+        return ModuleHealth::kOk;
+    }
+
+    return ModuleHealth::kUnknown;
+  }());
+  diagnostics.pn532 = to_module_health(state.hardware.rfid_present, [&state]() -> ModuleHealth {
+    switch (state.rfid_status) {
+      case RfidStatus::kBooting:
+        return ModuleHealth::kInit;
+      case RfidStatus::kReaderMissing:
+        return ModuleHealth::kError;
+      case RfidStatus::kWaitingForCard:
+      case RfidStatus::kCardPresent:
+      case RfidStatus::kCardRemoved:
+        return ModuleHealth::kOk;
+    }
+
+    return ModuleHealth::kUnknown;
+  }());
+  diagnostics.display = ModuleHealth::kOk;
+  diagnostics.buttons = ModuleHealth::kOk;
+  diagnostics.axp192 = to_module_health(state.hardware.axp192_present, ModuleHealth::kOk);
+  diagnostics.i2c = (state.hardware.rfid_present || state.hardware.hx711_present || state.hardware.axp192_present)
+                        ? ModuleHealth::kOk
+                        : ModuleHealth::kError;
+  return diagnostics;
+}
+
 UiState to_ui_state(const AppState &state) {
   UiState ui_state{};
   ui_state.hardware = state.hardware;
@@ -121,6 +195,8 @@ UiState to_ui_state(const AppState &state) {
   ui_state.active_screen = state.active_screen;
   ui_state.rfid_status = state.rfid_status;
   ui_state.hx711_status = state.hx711_status;
+  ui_state.spool = state.spool;
+  ui_state.diagnostics = to_diagnostics_state(state);
   ui_state.hx711_enabled = state.hx711_enabled;
   ui_state.rfid_has_uid = state.rfid_has_uid;
   ui_state.rfid_usage_available = state.rfid_usage_available;
@@ -148,6 +224,23 @@ bool same_state(const UiState &lhs, const UiState &rhs) {
   return lhs.current_mode == rhs.current_mode && lhs.rfid_status == rhs.rfid_status &&
          lhs.active_screen == rhs.active_screen &&
          lhs.hx711_status == rhs.hx711_status && lhs.hx711_enabled == rhs.hx711_enabled &&
+         lhs.spool.valid == rhs.spool.valid &&
+         std::memcmp(lhs.spool.material, rhs.spool.material, sizeof(lhs.spool.material)) == 0 &&
+         std::memcmp(lhs.spool.color, rhs.spool.color, sizeof(lhs.spool.color)) == 0 &&
+         std::memcmp(lhs.spool.manufacturer, rhs.spool.manufacturer, sizeof(lhs.spool.manufacturer)) == 0 &&
+         lhs.spool.diameter_mm == rhs.spool.diameter_mm &&
+         lhs.spool.nozzle_temp_c == rhs.spool.nozzle_temp_c &&
+         lhs.spool.bed_temp_c == rhs.spool.bed_temp_c &&
+         lhs.spool.reference_full_weight_g == rhs.spool.reference_full_weight_g &&
+         lhs.spool.current_weight_g == rhs.spool.current_weight_g &&
+         lhs.spool.used_weight_g == rhs.spool.used_weight_g &&
+         lhs.spool.remaining_percent == rhs.spool.remaining_percent &&
+         lhs.diagnostics.hx711 == rhs.diagnostics.hx711 &&
+         lhs.diagnostics.pn532 == rhs.diagnostics.pn532 &&
+         lhs.diagnostics.display == rhs.diagnostics.display &&
+         lhs.diagnostics.buttons == rhs.diagnostics.buttons &&
+         lhs.diagnostics.axp192 == rhs.diagnostics.axp192 &&
+         lhs.diagnostics.i2c == rhs.diagnostics.i2c &&
          lhs.rfid_has_uid == rhs.rfid_has_uid &&
          lhs.rfid_usage_available == rhs.rfid_usage_available &&
          lhs.rfid_page_read_failed == rhs.rfid_page_read_failed &&
@@ -758,11 +851,25 @@ UiState App::snapshot_ui_state() const {
 void App::publish_state(const AppState &state) {
   if (state_mutex_ == nullptr) {
     app_state_ = state;
+    update_spool_metrics_for_state(app_state_);
     return;
   }
 
   if (xSemaphoreTake(state_mutex_, portMAX_DELAY) == pdTRUE) {
     app_state_ = state;
+    update_spool_metrics_for_state(app_state_);
+    xSemaphoreGive(state_mutex_);
+  }
+}
+
+void App::update_spool_metrics() {
+  if (state_mutex_ == nullptr) {
+    update_spool_metrics_for_state(app_state_);
+    return;
+  }
+
+  if (xSemaphoreTake(state_mutex_, portMAX_DELAY) == pdTRUE) {
+    update_spool_metrics_for_state(app_state_);
     xSemaphoreGive(state_mutex_);
   }
 }
@@ -924,6 +1031,7 @@ void App::app_task_loop() {
     }
 
     if (handled_event) {
+      update_spool_metrics_for_state(state);
       publish_state(state);
       const UiState current_state = to_ui_state(state);
       if (ui_state_changed(current_state, last_published_state)) {

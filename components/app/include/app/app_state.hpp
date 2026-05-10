@@ -57,12 +57,45 @@ enum class Hx711Status : uint8_t {
   kReady,
 };
 
+struct SpoolData {
+  bool valid = false;
+  char material[12] = {};
+  char color[16] = {};
+  char manufacturer[24] = {};
+  float diameter_mm = 1.75f;
+  int16_t nozzle_temp_c = 0;
+  int16_t bed_temp_c = 0;
+  int32_t reference_full_weight_g = 0;
+  int32_t current_weight_g = 0;
+  int32_t used_weight_g = 0;
+  uint8_t remaining_percent = 0;
+};
+
+enum class ModuleHealth : uint8_t {
+  kUnknown,
+  kInit,
+  kOk,
+  kWarning,
+  kError,
+  kMissing,
+};
+
+struct DiagnosticsState {
+  ModuleHealth hx711 = ModuleHealth::kUnknown;
+  ModuleHealth pn532 = ModuleHealth::kUnknown;
+  ModuleHealth display = ModuleHealth::kUnknown;
+  ModuleHealth buttons = ModuleHealth::kUnknown;
+  ModuleHealth axp192 = ModuleHealth::kUnknown;
+  ModuleHealth i2c = ModuleHealth::kUnknown;
+};
+
 struct AppState {
   HardwareAvailability hardware{};
   AppMode current_mode = AppMode::kBoot;
   UiScreen active_screen = UiScreen::kHome;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
+  SpoolData spool{};
   bool hx711_enabled = true;
   bool rfid_has_uid = false;
   bool rfid_usage_available = false;
@@ -89,6 +122,8 @@ struct UiState {
   UiScreen active_screen = UiScreen::kHome;
   RfidStatus rfid_status = RfidStatus::kBooting;
   Hx711Status hx711_status = Hx711Status::kBooting;
+  SpoolData spool{};
+  DiagnosticsState diagnostics{};
   bool hx711_enabled = true;
   bool rfid_has_uid = false;
   bool rfid_usage_available = false;

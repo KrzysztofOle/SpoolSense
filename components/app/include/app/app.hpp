@@ -55,6 +55,7 @@ class App {
   void handle_button_input(AppState &state, bool &handled_event);
   void handle_home_input(AppState &state, const ButtonEvent &event);
   void handle_scale_input(AppState &state, const ButtonEvent &event);
+  void update_spool_metrics();
   void start_tasks();
   void stop_tasks();
   void reset_state();
