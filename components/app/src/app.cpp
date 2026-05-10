@@ -290,6 +290,8 @@ UiScreen next_screen(UiScreen screen) {
     case UiScreen::kDiagnostics:
       return UiScreen::kScale;
     case UiScreen::kScale:
+      return UiScreen::kRfid;
+    case UiScreen::kRfid:
       return UiScreen::kHome;
     default:
       return UiScreen::kHome;
@@ -299,11 +301,13 @@ UiScreen next_screen(UiScreen screen) {
 UiScreen previous_screen(UiScreen screen) {
   switch (screen) {
     case UiScreen::kHome:
-      return UiScreen::kScale;
+      return UiScreen::kRfid;
     case UiScreen::kDiagnostics:
       return UiScreen::kHome;
     case UiScreen::kScale:
       return UiScreen::kDiagnostics;
+    case UiScreen::kRfid:
+      return UiScreen::kScale;
     default:
       return UiScreen::kHome;
   }
@@ -518,6 +522,9 @@ void render_state(const UiState &state) {
     case UiScreen::kScale:
       snapshot.screen = display::UiScreen::kScale;
       break;
+    case UiScreen::kRfid:
+      snapshot.screen = display::UiScreen::kRfid;
+      break;
     default:
       snapshot.screen = display::UiScreen::kHome;
       break;
@@ -538,6 +545,13 @@ void render_state(const UiState &state) {
   snapshot.scale.current_weight_g = state.spool.current_weight_g;
   snapshot.scale.reference_full_weight_g = state.spool.reference_full_weight_g;
   std::memcpy(snapshot.scale.status_message, state.status_message, sizeof(snapshot.scale.status_message));
+  snapshot.rfid.card_present = state.rfid_has_uid;
+  if (state.rfid_has_uid) {
+    diagnostics::format_uid(state.rfid_uid, state.rfid_uid_length, snapshot.rfid.uid, sizeof(snapshot.rfid.uid));
+  }
+  std::memcpy(snapshot.rfid.material, state.spool.material, sizeof(snapshot.rfid.material));
+  std::memcpy(snapshot.rfid.color, state.spool.color, sizeof(snapshot.rfid.color));
+  snapshot.rfid.reference_full_weight_g = state.spool.reference_full_weight_g;
 
   display::render(snapshot);
 }
@@ -860,6 +874,9 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
 
       case UiScreen::kScale:
         handle_scale_input(state, event);
+        break;
+      case UiScreen::kRfid:
+        handle_home_input(state, event);
         break;
 
       default:

@@ -21,6 +21,7 @@ enum class UiScreen : uint8_t {
   kHome = 0,
   kDiagnostics = 1,
   kScale = 2,
+  kRfid = 3,
 };
 
 struct HomeSnapshot {
@@ -45,11 +46,20 @@ struct ScaleSnapshot {
   char status_message[32] = {};
 };
 
+struct RfidSnapshot {
+  bool card_present = false;
+  char uid[32] = {};
+  char material[12] = {};
+  char color[16] = {};
+  int32_t reference_full_weight_g = 0;
+};
+
 struct UiSnapshot {
   UiScreen screen = UiScreen::kHome;
   HomeSnapshot home{};
   DiagnosticsSnapshot diagnostics{};
   ScaleSnapshot scale{};
+  RfidSnapshot rfid{};
 };
 
 void begin();

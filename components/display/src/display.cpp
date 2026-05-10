@@ -73,6 +73,11 @@ constexpr lv_coord_t k_scale_title_y = 8;
 constexpr lv_coord_t k_scale_line_1_y = 56;
 constexpr lv_coord_t k_scale_line_2_y = 96;
 constexpr lv_coord_t k_scale_line_3_y = 160;
+constexpr lv_coord_t k_rfid_title_y = 8;
+constexpr lv_coord_t k_rfid_line_1_y = 50;
+constexpr lv_coord_t k_rfid_line_2_y = 84;
+constexpr lv_coord_t k_rfid_line_3_y = 118;
+constexpr lv_coord_t k_rfid_line_4_y = 152;
 constexpr char k_empty_line[] = "";
 constexpr size_t k_max_line_length = 128;
 constexpr int k_draw_buffer_lines = 30;
@@ -316,6 +321,7 @@ class NativeDisplay {
     kHome,
     kDiagnostics,
     kScale,
+    kRfid,
   };
 
   bool begin() {
@@ -411,6 +417,10 @@ class NativeDisplay {
         ensure_style(ScreenStyle::kScale);
         refresh_scale(snapshot.scale);
         break;
+      case UiScreen::kRfid:
+        ensure_style(ScreenStyle::kRfid);
+        refresh_rfid(snapshot.rfid);
+        break;
       default:
         break;
     }
@@ -491,6 +501,10 @@ class NativeDisplay {
     }
     if (style == ScreenStyle::kScale) {
       build_scale_screen(scr);
+      return;
+    }
+    if (style == ScreenStyle::kRfid) {
+      build_rfid_screen(scr);
       return;
     }
 
@@ -682,6 +696,54 @@ class NativeDisplay {
     ui_dirty_ = false;
   }
 
+  void build_rfid_screen(lv_obj_t *scr) {
+    rfid_title_label_ = lv_label_create(scr);
+    lv_obj_set_style_text_color(rfid_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(rfid_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_pos(rfid_title_label_, k_line_x, k_rfid_title_y);
+
+    for (size_t index = 0; index < rfid_labels_.size(); ++index) {
+      rfid_labels_[index] = lv_label_create(scr);
+      lv_obj_set_style_text_color(rfid_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(rfid_labels_[index], &lv_font_montserrat_20, LV_PART_MAIN);
+      lv_obj_set_style_text_align(rfid_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+      lv_obj_set_width(rfid_labels_[index], NativeLcd::kWidth - 24);
+      const lv_coord_t y = index == 0   ? k_rfid_line_1_y
+                           : index == 1 ? k_rfid_line_2_y
+                           : index == 2 ? k_rfid_line_3_y
+                                        : k_rfid_line_4_y;
+      lv_obj_set_pos(rfid_labels_[index], k_line_x, y);
+    }
+  }
+
+  void refresh_rfid(const RfidSnapshot &snapshot) {
+    if (!ui_dirty_) {
+      return;
+    }
+
+    lv_label_set_text(rfid_title_label_, "RFID");
+    if (!snapshot.card_present) {
+      lv_label_set_text(rfid_labels_[0], "NO CARD");
+      lv_label_set_text(rfid_labels_[1], "PLACE TAG");
+      lv_label_set_text(rfid_labels_[2], "");
+      lv_label_set_text(rfid_labels_[3], "");
+    } else {
+      char line[80] = {};
+      std::snprintf(line, sizeof(line), "UID: %s", snapshot.uid[0] == '\0' ? "-" : snapshot.uid);
+      lv_label_set_text(rfid_labels_[0], line);
+      std::snprintf(line, sizeof(line), "Material: %s", snapshot.material[0] == '\0' ? "-" : snapshot.material);
+      lv_label_set_text(rfid_labels_[1], line);
+      std::snprintf(line, sizeof(line), "Color: %s", snapshot.color[0] == '\0' ? "-" : snapshot.color);
+      lv_label_set_text(rfid_labels_[2], line);
+      std::snprintf(line, sizeof(line), "Ref: %ld g", static_cast<long>(snapshot.reference_full_weight_g));
+      lv_label_set_text(rfid_labels_[3], line);
+    }
+
+    lv_timer_handler();
+    lv_refr_now(nullptr);
+    ui_dirty_ = false;
+  }
+
   static const char *health_text(uint8_t health) {
     switch (health) {
       case 2:
@@ -720,6 +782,14 @@ class NativeDisplay {
            std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0;
   }
 
+  static bool is_same_rfid_snapshot(const RfidSnapshot &lhs, const RfidSnapshot &rhs) {
+    return lhs.card_present == rhs.card_present &&
+           std::memcmp(lhs.uid, rhs.uid, sizeof(lhs.uid)) == 0 &&
+           std::memcmp(lhs.material, rhs.material, sizeof(lhs.material)) == 0 &&
+           std::memcmp(lhs.color, rhs.color, sizeof(lhs.color)) == 0 &&
+           lhs.reference_full_weight_g == rhs.reference_full_weight_g;
+  }
+
   static bool is_same_ui_snapshot(const UiSnapshot &lhs, const UiSnapshot &rhs) {
     if (lhs.screen != rhs.screen) {
       return false;
@@ -732,6 +802,8 @@ class NativeDisplay {
         return is_same_diagnostics_snapshot(lhs.diagnostics, rhs.diagnostics);
       case UiScreen::kScale:
         return is_same_scale_snapshot(lhs.scale, rhs.scale);
+      case UiScreen::kRfid:
+        return is_same_rfid_snapshot(lhs.rfid, rhs.rfid);
       default:
         return false;
     }
@@ -769,6 +841,8 @@ class NativeDisplay {
   std::array<lv_obj_t *, 4> diagnostics_labels_ = {nullptr, nullptr, nullptr, nullptr};
   lv_obj_t *scale_title_label_ = nullptr;
   std::array<lv_obj_t *, 3> scale_labels_ = {nullptr, nullptr, nullptr};
+  lv_obj_t *rfid_title_label_ = nullptr;
+  std::array<lv_obj_t *, 4> rfid_labels_ = {nullptr, nullptr, nullptr, nullptr};
   static lv_color_t draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 };
 
