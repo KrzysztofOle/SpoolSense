@@ -17,6 +17,15 @@
 #include <stdint.h>
 
 namespace display {
+struct HomeSnapshot {
+  char material[12] = {};
+  char color[16] = {};
+  int32_t current_weight_g = 0;
+  int32_t reference_full_weight_g = 0;
+  int32_t used_weight_g = 0;
+  uint8_t remaining_percent = 0;
+};
+
 void begin();
 bool is_narrow();
 void show_boot_test();
@@ -24,6 +33,7 @@ void show_text(const char *line1, const char *line2 = nullptr);
 void show_lines(const char *line1, const char *line2 = nullptr, const char *line3 = nullptr,
                 const char *line4 = nullptr);
 void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4);
+void render_home(const HomeSnapshot &snapshot);
 void append_line(const char *line);
 void show_card_removed();
 void show_uid_and_type(const uint8_t *uid, uint8_t uid_length);

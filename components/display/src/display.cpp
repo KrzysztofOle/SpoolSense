@@ -54,6 +54,16 @@ constexpr spi_host_device_t k_lcd_host = SPI2_HOST;
 constexpr lv_coord_t k_line_x = 12;
 constexpr lv_coord_t k_regular_line_y[] = {10, 44, 78, 112};
 constexpr lv_coord_t k_diagnostic_line_y[] = {10, 56, 102, 148};
+constexpr lv_coord_t k_home_title_y = 8;
+constexpr lv_coord_t k_home_line_1_y = 38;
+constexpr lv_coord_t k_home_line_2_y = 68;
+constexpr lv_coord_t k_home_line_3_y = 98;
+constexpr lv_coord_t k_home_line_4_y = 128;
+constexpr lv_coord_t k_home_bar_x = 12;
+constexpr lv_coord_t k_home_bar_y = 170;
+constexpr lv_coord_t k_home_bar_w = 296;
+constexpr lv_coord_t k_home_bar_h = 24;
+constexpr lv_coord_t k_home_bar_text_y = 200;
 constexpr char k_empty_line[] = "";
 constexpr size_t k_max_line_length = 128;
 constexpr int k_draw_buffer_lines = 30;
@@ -294,6 +304,7 @@ class NativeDisplay {
   enum class ScreenStyle : uint8_t {
     kRegular,
     kDiagnostic,
+    kHome,
   };
 
   bool begin() {
@@ -353,6 +364,24 @@ class NativeDisplay {
 
   void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4) {
     show_lines_internal(ScreenStyle::kDiagnostic, line1, line2, line3, line4);
+  }
+
+  void render_home(const HomeSnapshot &snapshot) {
+    if (!configured_) {
+      return;
+    }
+
+    if (has_home_snapshot_ && is_same_home_snapshot(snapshot, last_home_snapshot_)) {
+      ui_dirty_ = false;
+      return;
+    }
+
+    last_home_snapshot_ = snapshot;
+    has_home_snapshot_ = true;
+    ui_dirty_ = true;
+
+    ensure_style(ScreenStyle::kHome);
+    refresh_home(snapshot);
   }
 
   void append_line(const char *line) {
@@ -420,6 +449,11 @@ class NativeDisplay {
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
 
+    if (style == ScreenStyle::kHome) {
+      build_home_screen(scr);
+      return;
+    }
+
     const lv_coord_t *line_y = style == ScreenStyle::kDiagnostic ? k_diagnostic_line_y : k_regular_line_y;
     const lv_font_t *font = style == ScreenStyle::kDiagnostic ? &lv_font_montserrat_20 : &lv_font_montserrat_14;
 
@@ -445,6 +479,98 @@ class NativeDisplay {
     lv_refr_now(nullptr);
   }
 
+  void build_home_screen(lv_obj_t *scr) {
+    home_title_label_ = lv_label_create(scr);
+    lv_obj_set_style_text_color(home_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(home_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_pos(home_title_label_, k_line_x, k_home_title_y);
+
+    for (size_t index = 0; index < home_info_labels_.size(); ++index) {
+      home_info_labels_[index] = lv_label_create(scr);
+      lv_obj_set_style_text_color(home_info_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(home_info_labels_[index], &lv_font_montserrat_16, LV_PART_MAIN);
+      lv_obj_set_style_text_align(home_info_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+      lv_obj_set_width(home_info_labels_[index], NativeLcd::kWidth - 24);
+      lv_obj_set_pos(home_info_labels_[index], k_line_x,
+                     index == 0 ? k_home_line_1_y
+                                : (index == 1 ? k_home_line_2_y : (index == 2 ? k_home_line_3_y : k_home_line_4_y)));
+    }
+
+    home_bar_bg_ = lv_obj_create(scr);
+    lv_obj_remove_style_all(home_bar_bg_);
+    lv_obj_set_pos(home_bar_bg_, k_home_bar_x, k_home_bar_y);
+    lv_obj_set_size(home_bar_bg_, k_home_bar_w, k_home_bar_h);
+    lv_obj_set_style_bg_color(home_bar_bg_, lv_color_hex(0x404040), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(home_bar_bg_, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(home_bar_bg_, lv_color_hex(0x808080), LV_PART_MAIN);
+    lv_obj_set_style_border_width(home_bar_bg_, 1, LV_PART_MAIN);
+
+    home_bar_fill_ = lv_obj_create(scr);
+    lv_obj_remove_style_all(home_bar_fill_);
+    lv_obj_set_pos(home_bar_fill_, k_home_bar_x + 1, k_home_bar_y + 1);
+    lv_obj_set_size(home_bar_fill_, 0, k_home_bar_h - 2);
+    lv_obj_set_style_bg_color(home_bar_fill_, lv_color_hex(0x2ECC71), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(home_bar_fill_, LV_OPA_COVER, LV_PART_MAIN);
+
+    home_remain_label_ = lv_label_create(scr);
+    lv_obj_set_style_text_color(home_remain_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(home_remain_label_, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_set_pos(home_remain_label_, k_line_x, k_home_bar_text_y);
+  }
+
+  void refresh_home(const HomeSnapshot &snapshot) {
+    if (!ui_dirty_) {
+      return;
+    }
+
+    char title[48] = {};
+    std::snprintf(title, sizeof(title), "SpoolSense");
+    lv_label_set_text(home_title_label_, title);
+
+    char line1[64] = {};
+    std::snprintf(line1, sizeof(line1), "%s / %s",
+                  snapshot.material[0] == '\0' ? "-" : snapshot.material,
+                  snapshot.color[0] == '\0' ? "-" : snapshot.color);
+    lv_label_set_text(home_info_labels_[0], line1);
+
+    char line2[64] = {};
+    std::snprintf(line2, sizeof(line2), "Weight: %ld g", static_cast<long>(snapshot.current_weight_g));
+    lv_label_set_text(home_info_labels_[1], line2);
+
+    char line3[64] = {};
+    std::snprintf(line3, sizeof(line3), "Ref: %ld g", static_cast<long>(snapshot.reference_full_weight_g));
+    lv_label_set_text(home_info_labels_[2], line3);
+
+    char line4[64] = {};
+    std::snprintf(line4, sizeof(line4), "Used: %ld g", static_cast<long>(snapshot.used_weight_g));
+    lv_label_set_text(home_info_labels_[3], line4);
+
+    uint8_t percent = snapshot.remaining_percent;
+    if (percent > 100U) {
+      percent = 100U;
+    }
+    const lv_coord_t inner_w = k_home_bar_w - 2;
+    const lv_coord_t fill_w = static_cast<lv_coord_t>((static_cast<int32_t>(inner_w) * percent) / 100);
+    lv_obj_set_size(home_bar_fill_, fill_w, k_home_bar_h - 2);
+
+    char remain_line[48] = {};
+    std::snprintf(remain_line, sizeof(remain_line), "Remain: %u%%", static_cast<unsigned>(percent));
+    lv_label_set_text(home_remain_label_, remain_line);
+
+    lv_timer_handler();
+    lv_refr_now(nullptr);
+    ui_dirty_ = false;
+  }
+
+  static bool is_same_home_snapshot(const HomeSnapshot &lhs, const HomeSnapshot &rhs) {
+    return std::memcmp(lhs.material, rhs.material, sizeof(lhs.material)) == 0 &&
+           std::memcmp(lhs.color, rhs.color, sizeof(lhs.color)) == 0 &&
+           lhs.current_weight_g == rhs.current_weight_g &&
+           lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
+           lhs.used_weight_g == rhs.used_weight_g &&
+           lhs.remaining_percent == rhs.remaining_percent;
+  }
+
   void sync_time() {
     const uint32_t now_ms = millis_now();
     if (have_tick_) {
@@ -464,7 +590,15 @@ class NativeDisplay {
   uint32_t last_tick_ms_ = 0;
   bool have_tick_ = false;
   bool configured_ = false;
+  bool ui_dirty_ = false;
+  bool has_home_snapshot_ = false;
   ScreenStyle screen_style_ = ScreenStyle::kRegular;
+  HomeSnapshot last_home_snapshot_{};
+  lv_obj_t *home_title_label_ = nullptr;
+  std::array<lv_obj_t *, 4> home_info_labels_ = {nullptr, nullptr, nullptr, nullptr};
+  lv_obj_t *home_bar_bg_ = nullptr;
+  lv_obj_t *home_bar_fill_ = nullptr;
+  lv_obj_t *home_remain_label_ = nullptr;
   static lv_color_t draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 };
 
@@ -504,6 +638,10 @@ void show_lines(const char *line1, const char *line2, const char *line3, const c
 
 void show_diagnostics(const char *line1, const char *line2, const char *line3, const char *line4) {
   display_device().show_diagnostics(line1, line2, line3, line4);
+}
+
+void render_home(const HomeSnapshot &snapshot) {
+  display_device().render_home(snapshot);
 }
 
 void append_line(const char *line) {

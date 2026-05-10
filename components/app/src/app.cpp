@@ -289,21 +289,6 @@ const char *button_action_text(ButtonAction action) {
   return "acted";
 }
 
-const char *button_short_text(ButtonKind kind) {
-  switch (kind) {
-    case ButtonKind::kA:
-      return "BtnA";
-    case ButtonKind::kB:
-      return "BtnB";
-    case ButtonKind::kC:
-      return "BtnC";
-    case ButtonKind::kNone:
-      return "";
-  }
-
-  return "";
-}
-
 const char *rfid_status_text(const UiState &state) {
   if (!state.hardware.rfid_present) {
     return "RFID: missing";
@@ -325,27 +310,6 @@ const char *rfid_status_text(const UiState &state) {
   return "RFID: unknown";
 }
 
-const char *rfid_status_short_text(const UiState &state) {
-  if (!state.hardware.rfid_present) {
-    return "RFID: miss";
-  }
-
-  switch (state.rfid_status) {
-    case RfidStatus::kBooting:
-      return "RFID: boot";
-    case RfidStatus::kReaderMissing:
-      return "RFID: miss";
-    case RfidStatus::kWaitingForCard:
-      return "RFID: wait";
-    case RfidStatus::kCardPresent:
-      return "RFID: card";
-    case RfidStatus::kCardRemoved:
-      return "RFID: gone";
-  }
-
-  return "RFID: ?";
-}
-
 const char *hx711_status_text(const UiState &state) {
   if (!state.hardware.hx711_present) {
     return "HX711: missing";
@@ -365,25 +329,6 @@ const char *hx711_status_text(const UiState &state) {
   return "HX711: unknown";
 }
 
-const char *hx711_status_short_text(const UiState &state) {
-  if (!state.hardware.hx711_present) {
-    return "HX: miss";
-  }
-
-  switch (state.hx711_status) {
-    case Hx711Status::kBooting:
-      return "HX: boot";
-    case Hx711Status::kDisabled:
-      return "HX: off";
-    case Hx711Status::kNotFound:
-      return "HX: miss";
-    case Hx711Status::kReady:
-      return "HX: ready";
-  }
-
-  return "HX: ?";
-}
-
 const char *app_mode_text(AppMode mode) {
   switch (mode) {
     case AppMode::kBoot:
@@ -401,25 +346,6 @@ const char *app_mode_text(AppMode mode) {
   }
 
   return "Mode: unknown";
-}
-
-const char *app_mode_short_text(AppMode mode) {
-  switch (mode) {
-    case AppMode::kBoot:
-      return "Mode: boot";
-    case AppMode::kIdle:
-      return "Mode: idle";
-    case AppMode::kTagDetected:
-      return "Mode: tag";
-    case AppMode::kMeasuring:
-      return "Mode: meas";
-    case AppMode::kError:
-      return "Mode: error";
-    case AppMode::kCalibration:
-      return "Mode: calib";
-  }
-
-  return "Mode: ?";
 }
 
 void log_mode_if_changed(AppMode before_mode, AppMode after_mode) {
@@ -533,84 +459,6 @@ void log_weight_event_effects(const AppState &before_state, const AppState &afte
   log_mode_if_changed(before_state.current_mode, after_state.current_mode);
 }
 
-void render_developer_screen(const UiState &state) {
-  char line1[48] = {};
-  std::snprintf(line1, sizeof(line1), "%s", app_mode_text(state.current_mode));
-
-  char line2[48] = {};
-  std::snprintf(line2, sizeof(line2), "%s", rfid_status_text(state));
-
-  char line3[48] = {};
-  std::snprintf(line3, sizeof(line3), "%s", hx711_status_text(state));
-
-  char line4[96] = {};
-  if (state.hx711_has_sample) {
-    std::snprintf(line4, sizeof(line4), "Weight: %ld g", static_cast<long>(state.hx711_weight_grams));
-  } else if (state.hx711_zeroed) {
-    std::snprintf(line4, sizeof(line4), "HX711 zeroed");
-  } else if (state.rfid_has_uid) {
-    char uid_line[48] = {};
-    diagnostics::format_uid(state.rfid_uid, state.rfid_uid_length, uid_line, sizeof(uid_line));
-    size_t used = 0;
-    used += static_cast<size_t>(std::snprintf(line4 + used, sizeof(line4) - used, "UID: %s", uid_line));
-    if (state.last_button != ButtonKind::kNone) {
-      if (used + 1 < sizeof(line4)) {
-        (void)std::snprintf(line4 + used, sizeof(line4) - used, " Btn: %s", button_text(state.last_button));
-      }
-    }
-  } else if (state.last_button != ButtonKind::kNone) {
-    std::snprintf(line4, sizeof(line4), "Btn: %s", button_text(state.last_button));
-  } else if (state.hx711_enabled) {
-    std::snprintf(line4, sizeof(line4), "RFID/UI ready");
-  } else {
-    std::snprintf(line4, sizeof(line4), "HX711 disabled");
-  }
-
-  display::show_lines(line1, line2, line3, line4);
-}
-
-void render_compact_screen(const UiState &state) {
-  char line1[32] = {};
-  std::snprintf(line1, sizeof(line1), "%s", app_mode_short_text(state.current_mode));
-
-  char line2[32] = {};
-  if (state.hx711_has_sample) {
-    std::snprintf(line2, sizeof(line2), "W:%ldg", static_cast<long>(state.hx711_weight_grams));
-  } else if (state.hx711_zeroed) {
-    std::snprintf(line2, sizeof(line2), "W: zeroed");
-  } else {
-    std::snprintf(line2, sizeof(line2), "W: --");
-  }
-
-  char line3[32] = {};
-  std::snprintf(line3, sizeof(line3), "%s", rfid_status_short_text(state));
-
-  char line4[32] = {};
-  if (state.last_button != ButtonKind::kNone) {
-    std::snprintf(line4, sizeof(line4), "%s", button_short_text(state.last_button));
-  } else {
-    std::snprintf(line4, sizeof(line4), "%s", hx711_status_short_text(state));
-  }
-
-  display::show_lines(line1, line2, line3, line4);
-}
-
-void render_missing_devices_screen(const UiState &state) {
-  char line1[32] = {};
-  std::snprintf(line1, sizeof(line1), "Diagnostics");
-
-  char line2[32] = {};
-  std::snprintf(line2, sizeof(line2), "RFID: %s", state.hardware.rfid_present ? "present" : "missing");
-
-  char line3[32] = {};
-  std::snprintf(line3, sizeof(line3), "HX711: %s", state.hardware.hx711_present ? "present" : "missing");
-
-  char line4[32] = {};
-  std::snprintf(line4, sizeof(line4), "AXP192: %s", state.hardware.axp192_present ? "present" : "missing");
-
-  display::show_diagnostics(line1, line2, line3, line4);
-}
-
 void log_timeout_effects(const AppState &before_state, const AppState &after_state, uint32_t now_ms) {
   if (after_state.current_mode == before_state.current_mode) {
     return;
@@ -628,17 +476,14 @@ void log_timeout_effects(const AppState &before_state, const AppState &after_sta
 }
 
 void render_state(const UiState &state) {
-  if (!state.hardware.rfid_present || !state.hardware.hx711_present) {
-    render_missing_devices_screen(state);
-    return;
-  }
-
-  if (display::is_narrow()) {
-    render_compact_screen(state);
-    return;
-  }
-
-  render_developer_screen(state);
+  display::HomeSnapshot snapshot{};
+  std::memcpy(snapshot.material, state.spool.material, sizeof(snapshot.material));
+  std::memcpy(snapshot.color, state.spool.color, sizeof(snapshot.color));
+  snapshot.current_weight_g = state.spool.current_weight_g;
+  snapshot.reference_full_weight_g = state.spool.reference_full_weight_g;
+  snapshot.used_weight_g = state.spool.used_weight_g;
+  snapshot.remaining_percent = state.spool.remaining_percent;
+  display::render_home(snapshot);
 }
 }  // namespace
 
@@ -1310,20 +1155,13 @@ void App::hx711_task_loop() {
 }
 
 void App::ui_task_loop() {
-  UiState last_rendered_state{};
-  bool has_rendered_state = false;
-
   for (;;) {
     UiState state{};
     if (xQueueReceive(ui_state_queue_, &state, portMAX_DELAY) != pdTRUE) {
       continue;
     }
 
-    if (!has_rendered_state || !same_state(state, last_rendered_state)) {
-      render_state(state);
-      last_rendered_state = state;
-      has_rendered_state = true;
-    }
+    render_state(state);
   }
 }
 
