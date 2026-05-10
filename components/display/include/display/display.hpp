@@ -43,6 +43,8 @@ struct DiagnosticsSnapshot {
 struct ScaleSnapshot {
   int32_t current_weight_g = 0;
   int32_t reference_full_weight_g = 0;
+  bool sensor_weight_available = false;
+  int32_t sensor_weight_g = 0;
   char status_message[32] = {};
 };
 

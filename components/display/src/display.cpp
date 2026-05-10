@@ -76,7 +76,8 @@ constexpr lv_coord_t k_diag_line_3_y = 118;
 constexpr lv_coord_t k_diag_line_4_y = 154;
 constexpr lv_coord_t k_scale_line_1_y = 56;
 constexpr lv_coord_t k_scale_line_2_y = 96;
-constexpr lv_coord_t k_scale_line_3_y = 160;
+constexpr lv_coord_t k_scale_line_3_y = 136;
+constexpr lv_coord_t k_scale_line_4_y = 170;
 constexpr lv_coord_t k_rfid_line_1_y = 50;
 constexpr lv_coord_t k_rfid_line_2_y = 84;
 constexpr lv_coord_t k_rfid_line_3_y = 118;
@@ -596,10 +597,8 @@ class NativeDisplay {
     lv_label_set_text(home_info_labels_[0], line1);
 
     char line2[96] = {};
-    std::snprintf(line2, sizeof(line2), "W:%ldg  R:%ldg  U:%ldg",
-                  static_cast<long>(snapshot.current_weight_g),
-                  static_cast<long>(snapshot.reference_full_weight_g),
-                  static_cast<long>(snapshot.used_weight_g));
+    std::snprintf(line2, sizeof(line2), "Remaining filament: %ld g",
+                  static_cast<long>(snapshot.current_weight_g));
     lv_label_set_text(home_info_labels_[1], line2);
 
     lv_label_set_text(home_info_labels_[2], "");
@@ -682,7 +681,10 @@ class NativeDisplay {
       lv_obj_set_style_text_font(scale_labels_[index], &lv_font_montserrat_20, LV_PART_MAIN);
       lv_obj_set_style_text_align(scale_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
       lv_obj_set_width(scale_labels_[index], NativeLcd::kWidth - 24);
-      const lv_coord_t y = index == 0 ? k_scale_line_1_y : (index == 1 ? k_scale_line_2_y : k_scale_line_3_y);
+      const lv_coord_t y = index == 0   ? k_scale_line_1_y
+                           : index == 1 ? k_scale_line_2_y
+                           : index == 2 ? k_scale_line_3_y
+                                        : k_scale_line_4_y;
       lv_obj_set_pos(scale_labels_[index], k_line_x, y);
     }
 
@@ -700,10 +702,16 @@ class NativeDisplay {
     lv_label_set_text(scale_labels_[0], line);
     std::snprintf(line, sizeof(line), "Ref:    %ld g", static_cast<long>(snapshot.reference_full_weight_g));
     lv_label_set_text(scale_labels_[1], line);
-    if (snapshot.status_message[0] != '\0') {
-      lv_label_set_text(scale_labels_[2], snapshot.status_message);
+    if (snapshot.sensor_weight_available) {
+      std::snprintf(line, sizeof(line), "Sensor: %ld g", static_cast<long>(snapshot.sensor_weight_g));
     } else {
-      lv_label_set_text(scale_labels_[2], "");
+      std::snprintf(line, sizeof(line), "Sensor: -");
+    }
+    lv_label_set_text(scale_labels_[2], line);
+    if (snapshot.status_message[0] != '\0') {
+      lv_label_set_text(scale_labels_[3], snapshot.status_message);
+    } else {
+      lv_label_set_text(scale_labels_[3], "");
     }
     refresh_footer("TARA", "SAVE REF", "NEXT");
 
@@ -803,6 +811,8 @@ class NativeDisplay {
   static bool is_same_scale_snapshot(const ScaleSnapshot &lhs, const ScaleSnapshot &rhs) {
     return lhs.current_weight_g == rhs.current_weight_g &&
            lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
+           lhs.sensor_weight_available == rhs.sensor_weight_available &&
+           lhs.sensor_weight_g == rhs.sensor_weight_g &&
            std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0;
   }
 
@@ -914,7 +924,7 @@ class NativeDisplay {
   std::array<lv_obj_t *, 4> diagnostics_labels_ = {nullptr, nullptr, nullptr, nullptr};
   lv_obj_t *scale_title_bar_ = nullptr;
   lv_obj_t *scale_title_label_ = nullptr;
-  std::array<lv_obj_t *, 3> scale_labels_ = {nullptr, nullptr, nullptr};
+  std::array<lv_obj_t *, 4> scale_labels_ = {nullptr, nullptr, nullptr, nullptr};
   lv_obj_t *rfid_title_bar_ = nullptr;
   lv_obj_t *rfid_title_label_ = nullptr;
   std::array<lv_obj_t *, 4> rfid_labels_ = {nullptr, nullptr, nullptr, nullptr};

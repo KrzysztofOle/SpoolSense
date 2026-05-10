@@ -115,7 +115,7 @@ const char *color_name(uint8_t code) {
   return kColors[code];
 }
 
-spool_tag::SpoolTagV1 make_random_spool_profile(int32_t current_weight_g) {
+spool_tag::SpoolTagV1 make_random_spool_profile() {
   static constexpr uint16_t kReferenceWeights[] = {850, 1000, 1200, 1500};
   static constexpr uint16_t kSpoolCapacities[] = {250, 500, 750, 1000};
   static constexpr uint8_t kNozzleTemps[] = {200, 205, 210, 220, 235, 245};
@@ -129,23 +129,18 @@ spool_tag::SpoolTagV1 make_random_spool_profile(int32_t current_weight_g) {
   const uint8_t color_index = static_cast<uint8_t>(esp_random() % 8U);
   spool_tag::sanitize_ascii_field(profile.material, sizeof(profile.material), kMaterials[material_index]);
   spool_tag::sanitize_ascii_field(profile.color, sizeof(profile.color), color_name(color_index));
-  const int32_t clamped_current = current_weight_g < 0 ? 0 : current_weight_g;
-  const uint16_t fallback_ref =
+  profile.reference_weight_g =
       kReferenceWeights[esp_random() % (sizeof(kReferenceWeights) / sizeof(kReferenceWeights[0]))];
-  if (clamped_current > 0) {
-    const int32_t used_delta = 120 + static_cast<int32_t>(esp_random() % 380U);  // 120..499 g used
-    int32_t derived_ref = clamped_current + used_delta;
-    if (derived_ref > 65000) {
-      derived_ref = 65000;
-    }
-    profile.reference_weight_g = static_cast<uint16_t>(derived_ref);
-  } else {
-    profile.reference_weight_g = fallback_ref;
-  }
-  profile.last_known_weight_g = static_cast<uint16_t>(clamped_current > 65535 ? 65535 : clamped_current);
   profile.spool_capacity_g =
       kSpoolCapacities[esp_random() % (sizeof(kSpoolCapacities) / sizeof(kSpoolCapacities[0]))];
   profile.initial_filament_g = profile.spool_capacity_g;
+  // Simulate partial filament usage on tag snapshots (5..85% used).
+  const uint16_t used_percent = static_cast<uint16_t>(5U + (esp_random() % 81U));
+  const uint32_t used_filament_g =
+      (static_cast<uint32_t>(profile.initial_filament_g) * static_cast<uint32_t>(used_percent)) / 100U;
+  const uint32_t remaining_filament_g =
+      (used_filament_g >= profile.initial_filament_g) ? 0U : (profile.initial_filament_g - used_filament_g);
+  profile.last_known_weight_g = static_cast<uint16_t>(remaining_filament_g);
   profile.diameter_x100 =
       kDiameterX100[esp_random() % (sizeof(kDiameterX100) / sizeof(kDiameterX100[0]))];
   profile.nozzle_temp_c =
@@ -187,7 +182,7 @@ int32_t raw_to_grams(long raw_value) {
 
 void update_spool_metrics_for_state(AppState &state) {
   const int32_t reference_full_weight_g = state.spool.reference_full_weight_g;
-  const int32_t current_weight_g = state.hx711_has_sample ? state.hx711_weight_grams : state.spool.current_weight_g;
+  const int32_t current_weight_g = state.spool.current_weight_g;
   const int32_t clamped_current_weight_g = current_weight_g < 0 ? 0 : current_weight_g;
 
   state.spool.current_weight_g = current_weight_g;
@@ -624,6 +619,8 @@ void render_state(const UiState &state) {
 
   snapshot.scale.current_weight_g = state.spool.current_weight_g;
   snapshot.scale.reference_full_weight_g = state.spool.reference_full_weight_g;
+  snapshot.scale.sensor_weight_available = state.hx711_has_sample;
+  snapshot.scale.sensor_weight_g = state.hx711_weight_grams;
   std::memcpy(snapshot.scale.status_message, state.status_message, sizeof(snapshot.scale.status_message));
   snapshot.rfid.card_present = state.rfid_has_uid;
   if (state.rfid_has_uid) {
@@ -1088,7 +1085,7 @@ void App::handle_rfid_input(AppState &state, const ButtonEvent &event) {
   command.start_page = kRfidSampleStartPage;
   command.page_count = kRfidSamplePageCount;
   command.timestamp_ms = event.timestamp_ms;
-  const spool_tag::SpoolTagV1 profile = make_random_spool_profile(state.spool.current_weight_g);
+  const spool_tag::SpoolTagV1 profile = make_random_spool_profile();
   if (!spool_tag::serialize(profile, command.data, sizeof(command.data))) {
     diagnostics::log_line("RFID save skipped: serialize fail");
     std::snprintf(state.status_message, sizeof(state.status_message), "SAVE ERROR");
@@ -1175,6 +1172,8 @@ void App::app_task_loop() {
         state.spool.diameter_mm = static_cast<float>(rfid_event.profile_diameter_x100) / 100.0f;
         state.spool.nozzle_temp_c = static_cast<int16_t>(rfid_event.profile_nozzle_temp_c);
         state.spool.bed_temp_c = static_cast<int16_t>(rfid_event.profile_bed_temp_c);
+        // Use tag snapshot immediately after card change; next HX711 sample will overwrite it.
+        state.hx711_has_sample = false;
       }
       log_rfid_event_effects(before_state, state, rfid_event);
       handled_event = true;
