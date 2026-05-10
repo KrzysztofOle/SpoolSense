@@ -57,6 +57,10 @@ void NativeApp::run() {
   uint32_t boot_ms = millis_now();
   uint32_t last_loop_ms = boot_ms;
   uint32_t last_log_ms = boot_ms;
+  uint32_t last_a_action_ms = boot_ms;
+  uint32_t last_b_action_ms = boot_ms;
+  uint32_t last_c_action_ms = boot_ms;
+  constexpr uint32_t k_button_debounce_ms = 250U;
 
   for (;;) {
     const uint32_t now_ms = millis_now();
@@ -68,16 +72,27 @@ void NativeApp::run() {
     if (!have_last_buttons || buttons.a != last_buttons.a || buttons.b != last_buttons.b ||
         buttons.c != last_buttons.c) {
       if (is_pressed_edge(buttons.a, last_buttons.a)) {
-        ++click_counters.a;
+        if ((now_ms - last_a_action_ms) >= k_button_debounce_ms) {
+          last_a_action_ms = now_ms;
+          ++click_counters.a;
+          ui.next_pattern();
+        }
       }
       if (is_pressed_edge(buttons.b, last_buttons.b)) {
-        ++click_counters.b;
-        if (!ui.toggle_color_order()) {
-          ESP_LOGE("sandbox", "Color order toggle failed");
+        if ((now_ms - last_b_action_ms) >= k_button_debounce_ms) {
+          last_b_action_ms = now_ms;
+          ++click_counters.b;
+          if (!ui.toggle_color_order()) {
+            ESP_LOGE("sandbox", "Color order toggle failed");
+          }
         }
       }
       if (is_pressed_edge(buttons.c, last_buttons.c)) {
-        ++click_counters.c;
+        if ((now_ms - last_c_action_ms) >= k_button_debounce_ms) {
+          last_c_action_ms = now_ms;
+          ++click_counters.c;
+          ui.reset_pattern();
+        }
       }
       last_buttons = buttons;
       have_last_buttons = true;

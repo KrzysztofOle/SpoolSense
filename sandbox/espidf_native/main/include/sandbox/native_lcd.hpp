@@ -34,8 +34,8 @@ class NativeLcd {
 
   esp_err_t begin();
   esp_err_t set_color_order(ColorOrder order);
-  esp_err_t send_line(int y, const uint16_t *line);
-  esp_err_t send_area(int x1, int y1, int x2, int y2, const uint16_t *pixels);
+  esp_err_t send_line(int y, const uint8_t *line);
+  esp_err_t send_area(int x1, int y1, int x2, int y2, const uint8_t *pixels);
   bool wait_tx_done();
 
  private:

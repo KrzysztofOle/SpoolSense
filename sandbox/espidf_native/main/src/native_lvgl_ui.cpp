@@ -3,7 +3,7 @@
  *
  * Features (EN):
  * - Configures LVGL display buffers and flush callback for NativeLcd.
- * - Shows an LCD color test with all RGB combinations as large swatches.
+ * - Shows switchable LCD color test patterns with large swatches.
  * - Keeps frame updates lightweight while staying fully native ESP-IDF.
  *
  * Funkcje (PL):
@@ -26,7 +26,7 @@ namespace sandbox {
 namespace {
 constexpr int k_draw_buffer_lines = 30;
 static lv_color_t s_draw_buffer[NativeLcd::kWidth * k_draw_buffer_lines];
-static uint16_t s_flush_color_buffer[NativeLcd::kWidth * k_draw_buffer_lines];
+static uint8_t s_flush_color_buffer[NativeLcd::kWidth * k_draw_buffer_lines * 3];
 static lv_disp_draw_buf_t s_draw_ctx;
 static lv_disp_drv_t s_disp_drv;
 
@@ -47,25 +47,43 @@ constexpr lv_coord_t k_gap_y = 10;
 constexpr lv_coord_t k_footer_y = -10;
 
 constexpr int k_swatch_count = 8;
+std::array<ColorSwatch, k_swatch_count> make_swatches(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kBgr: {
+      return {{
+          {"R", lv_color_hex(0xFF0000), lv_color_hex(0xFFFFFF)},
+          {"G", lv_color_hex(0x00FF00), lv_color_hex(0x000000)},
+          {"B", lv_color_hex(0x0000FF), lv_color_hex(0xFFFFFF)},
+          {"W", lv_color_hex(0xFFFFFF), lv_color_hex(0x000000)},
+          {"C", lv_color_hex(0x00FFFF), lv_color_hex(0x000000)},
+          {"M", lv_color_hex(0xFF00FF), lv_color_hex(0xFFFFFF)},
+          {"Y", lv_color_hex(0xFFFF00), lv_color_hex(0x000000)},
+          {"BK", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      }};
+    }
+    case ColorPattern::kGrayscale: {
+      return {{
+          {"0", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+          {"1", lv_color_hex(0x202020), lv_color_hex(0xFFFFFF)},
+          {"2", lv_color_hex(0x404040), lv_color_hex(0xFFFFFF)},
+          {"3", lv_color_hex(0x606060), lv_color_hex(0xFFFFFF)},
+          {"4", lv_color_hex(0x808080), lv_color_hex(0xFFFFFF)},
+          {"5", lv_color_hex(0xA0A0A0), lv_color_hex(0x000000)},
+          {"6", lv_color_hex(0xC0C0C0), lv_color_hex(0x000000)},
+          {"7", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
+      }};
+    }
+  }
 
-const char *screen_title() {
-  return "RGB COMBINATIONS";
-}
-
-const char *screen_subtitle() {
-  return "A/C COUNTS  B RGB/BGR";
-}
-
-std::array<ColorSwatch, k_swatch_count> make_swatches() {
   return {{
-      {"000", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"001", lv_color_hex(0x0000FF), lv_color_hex(0xFFFFFF)},
-      {"010", lv_color_hex(0x00FF00), lv_color_hex(0x000000)},
-      {"011", lv_color_hex(0x00FFFF), lv_color_hex(0x000000)},
-      {"100", lv_color_hex(0xFF0000), lv_color_hex(0xFFFFFF)},
-      {"101", lv_color_hex(0xFF00FF), lv_color_hex(0xFFFFFF)},
-      {"110", lv_color_hex(0xFFFF00), lv_color_hex(0x000000)},
-      {"111", lv_color_hex(0xFFFFFF), lv_color_hex(0x000000)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
   }};
 }
 
@@ -84,7 +102,7 @@ void create_swatch(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, l
 
   auto *label = lv_label_create(box);
   lv_obj_set_style_text_color(label, swatch.text_color, LV_PART_MAIN);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_22, LV_PART_MAIN);
   lv_label_set_text(label, swatch.label);
   lv_obj_center(label);
 }
@@ -110,7 +128,16 @@ void flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_
   const int height = (y2 - y1 + 1);
   const int px_count = width * height;
   for (int i = 0; i < px_count; ++i) {
-    s_flush_color_buffer[i] = color_p[i].full;
+    const uint16_t color = color_p[i].full;
+    const uint8_t r5 = static_cast<uint8_t>((color >> 11) & 0x1FU);
+    const uint8_t g6 = static_cast<uint8_t>((color >> 5) & 0x3FU);
+    const uint8_t b5 = static_cast<uint8_t>(color & 0x1FU);
+    const uint8_t r6 = static_cast<uint8_t>((r5 << 1U) | (r5 >> 4U));
+    const uint8_t b6 = static_cast<uint8_t>((b5 << 1U) | (b5 >> 4U));
+    const size_t offset = static_cast<size_t>(i) * 3U;
+    s_flush_color_buffer[offset + 0] = static_cast<uint8_t>(r6 << 2U);
+    s_flush_color_buffer[offset + 1] = static_cast<uint8_t>(g6 << 2U);
+    s_flush_color_buffer[offset + 2] = static_cast<uint8_t>(b6 << 2U);
   }
 
   if (lcd->send_area(x1, y1, x2, y2, s_flush_color_buffer) != ESP_OK) {
@@ -145,12 +172,17 @@ bool NativeLvglUi::begin(NativeLcd *lcd) {
   }
   disp_ = disp;
 
-  if (!set_color_order(color_order_)) {
-    return false;
-  }
+  return set_color_order(ColorOrder::kBgr);
+}
 
+void NativeLvglUi::next_pattern() {
+  pattern_ = static_cast<ColorPattern>((static_cast<uint8_t>(pattern_) + 1U) % 2U);
   rebuild_screen();
-  return true;
+}
+
+void NativeLvglUi::reset_pattern() {
+  pattern_ = ColorPattern::kBgr;
+  rebuild_screen();
 }
 
 bool NativeLvglUi::toggle_color_order() {
@@ -162,12 +194,13 @@ bool NativeLvglUi::set_color_order(ColorOrder order) {
     return false;
   }
 
-  color_order_ = order;
   if (lcd_->set_color_order(order) != ESP_OK) {
     ESP_LOGE("sandbox", "LCD color order update failed");
     return false;
   }
 
+  color_order_ = order;
+  rebuild_screen();
   return true;
 }
 
@@ -178,7 +211,7 @@ void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &c
 
   char line_footer[128];
   std::snprintf(line_footer, sizeof(line_footer), "%s | %s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
-                screen_title(), color_order_name(color_order_), static_cast<int>(buttons.a),
+                pattern_title(pattern_), color_order_name(color_order_), static_cast<int>(buttons.a),
                 static_cast<int>(buttons.b), static_cast<int>(buttons.c), static_cast<unsigned long>(uptime_ms / 1000U),
                 static_cast<unsigned long>(counters.a), static_cast<unsigned long>(counters.b),
                 static_cast<unsigned long>(counters.c));
@@ -200,24 +233,24 @@ void NativeLvglUi::rebuild_screen() {
   auto *title = lv_label_create(scr);
   lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(title, screen_title());
+  lv_label_set_text(title, pattern_title(pattern_));
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, k_title_y);
   title_ = title;
 
   auto *subtitle = lv_label_create(scr);
   lv_obj_set_style_text_color(subtitle, lv_color_hex(0xA0A0A0), LV_PART_MAIN);
   lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_label_set_text(subtitle, screen_subtitle());
+  lv_label_set_text(subtitle, pattern_subtitle(pattern_));
   lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, k_subtitle_y);
   subtitle_ = subtitle;
 
-  const auto swatches = make_swatches();
+  const auto swatches = make_swatches(pattern_);
   for (int index = 0; index < k_swatch_count; ++index) {
     const int column = index % 4;
     const int row = index / 4;
     const lv_coord_t x = k_grid_left + static_cast<lv_coord_t>(column) * (k_swatch_w + k_gap_x);
     const lv_coord_t y = k_grid_top + static_cast<lv_coord_t>(row) * (k_swatch_h + k_gap_y);
-    create_swatch(scr, x, y, k_swatch_w, k_swatch_h, swatches[index]);
+    create_swatch(scr, x, y, k_swatch_w, k_swatch_h, swatches[static_cast<size_t>(index)]);
   }
 
   auto *footer = lv_label_create(scr);
@@ -228,6 +261,28 @@ void NativeLvglUi::rebuild_screen() {
   footer_ = footer;
 
   lv_refr_now(nullptr);
+}
+
+const char *NativeLvglUi::pattern_title(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kBgr:
+      return "LCD COLOR TEST - BGR";
+    case ColorPattern::kGrayscale:
+      return "LCD COLOR TEST - GRAY";
+  }
+
+  return "LCD COLOR TEST";
+}
+
+const char *NativeLvglUi::pattern_subtitle(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kBgr:
+      return "A NEXT  B ORDER  C RESET";
+    case ColorPattern::kGrayscale:
+      return "A NEXT  B ORDER  C RESET";
+  }
+
+  return "";
 }
 
 const char *NativeLvglUi::color_order_name(ColorOrder order) {

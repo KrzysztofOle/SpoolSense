@@ -132,7 +132,7 @@ esp_err_t NativeLcd::begin() {
   static const uint8_t gamma_neg[] = {0x00, 0x0B, 0x11, 0x05, 0x13, 0x09, 0x33, 0x67, 0x48, 0x07,
                                       0x0E, 0x0B, 0x2E, 0x33, 0x0F};
   static const uint8_t dfunctr[] = {0x08, 0x82, 0x1D, 0x04};
-  static const uint8_t colmod[] = {0x55};
+  static const uint8_t colmod[] = {0x66};
   static const uint8_t pwr_ctrl[] = {0x01, 0x00, 0x00};
 
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x01), "sandbox", "SWRESET failed");
@@ -163,11 +163,11 @@ esp_err_t NativeLcd::set_color_order(ColorOrder order) {
   return lcd_write_cmd(io_handle_, 0x36, &madctl, 1);
 }
 
-esp_err_t NativeLcd::send_line(int y, const uint16_t *line) {
+esp_err_t NativeLcd::send_line(int y, const uint8_t *line) {
   return send_area(0, y, kWidth - 1, y, line);
 }
 
-esp_err_t NativeLcd::send_area(int x1, int y1, int x2, int y2, const uint16_t *pixels) {
+esp_err_t NativeLcd::send_area(int x1, int y1, int x2, int y2, const uint8_t *pixels) {
   uint8_t column_data[4];
   column_data[0] = static_cast<uint8_t>(x1 >> 8);
   column_data[1] = static_cast<uint8_t>(x1 & 0xFF);
@@ -185,7 +185,7 @@ esp_err_t NativeLcd::send_area(int x1, int y1, int x2, int y2, const uint16_t *p
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x2B, row_data, sizeof(row_data)), "sandbox", "PASET failed");
   const int width = x2 - x1 + 1;
   const int height = y2 - y1 + 1;
-  const size_t payload_size = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(uint16_t);
+  const size_t payload_size = static_cast<size_t>(width) * static_cast<size_t>(height) * 3U;
   return esp_lcd_panel_io_tx_color(io_handle_, 0x2C, pixels, payload_size);
 }
 
