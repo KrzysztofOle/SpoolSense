@@ -56,6 +56,17 @@ esp_err_t lcd_write_cmd(esp_lcd_panel_io_handle_t io, uint8_t cmd, const uint8_t
   return esp_lcd_panel_io_tx_param(io, cmd, data, len);
 }
 
+uint8_t madctl_for_order(ColorOrder order) {
+  switch (order) {
+    case ColorOrder::kRgb:
+      return 0x00;
+    case ColorOrder::kBgr:
+      return 0x08;
+  }
+
+  return 0x00;
+}
+
 void lcd_delay_ms(int ms) {
   vTaskDelay(pdMS_TO_TICKS(ms));
 }
@@ -121,7 +132,6 @@ esp_err_t NativeLcd::begin() {
   static const uint8_t gamma_neg[] = {0x00, 0x0B, 0x11, 0x05, 0x13, 0x09, 0x33, 0x67, 0x48, 0x07,
                                       0x0E, 0x0B, 0x2E, 0x33, 0x0F};
   static const uint8_t dfunctr[] = {0x08, 0x82, 0x1D, 0x04};
-  static const uint8_t madctl[] = {0x00};
   static const uint8_t colmod[] = {0x55};
   static const uint8_t pwr_ctrl[] = {0x01, 0x00, 0x00};
 
@@ -139,12 +149,18 @@ esp_err_t NativeLcd::begin() {
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xE1, gamma_neg, sizeof(gamma_neg)), "sandbox", "GMCTRN1 failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0xB6, dfunctr, sizeof(dfunctr)), "sandbox", "DFUNCTR failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x3A, colmod, sizeof(colmod)), "sandbox", "COLMOD failed");
-  ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x36, madctl, sizeof(madctl)), "sandbox", "MADCTL failed");
-  ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x20), "sandbox", "INVOFF failed");
+  ESP_RETURN_ON_ERROR(set_color_order(color_order_), "sandbox", "MADCTL failed");
+  ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x21), "sandbox", "INVON failed");
   ESP_RETURN_ON_ERROR(lcd_write_cmd(io_handle_, 0x29), "sandbox", "DISPON failed");
   lcd_delay_ms(20);
 
   return ESP_OK;
+}
+
+esp_err_t NativeLcd::set_color_order(ColorOrder order) {
+  color_order_ = order;
+  const uint8_t madctl = madctl_for_order(order);
+  return lcd_write_cmd(io_handle_, 0x36, &madctl, 1);
 }
 
 esp_err_t NativeLcd::send_line(int y, const uint16_t *line) {

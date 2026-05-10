@@ -38,8 +38,9 @@ class NativeLvglUi {
  public:
   bool begin(NativeLcd *lcd);
   void next_pattern();
-  void previous_pattern();
   void reset_pattern();
+  bool toggle_color_order();
+  bool set_color_order(ColorOrder order);
   void update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms);
   void tick(uint32_t elapsed_ms);
   void process();
@@ -48,7 +49,8 @@ class NativeLvglUi {
   void rebuild_screen();
   static const char *pattern_name(ColorPattern pattern);
   static ColorPattern next_pattern_of(ColorPattern pattern);
-  static ColorPattern previous_pattern_of(ColorPattern pattern);
+  static const char *color_order_name(ColorOrder order);
+  static ColorOrder next_color_order_of(ColorOrder order);
 
   NativeLcd *lcd_ = nullptr;
   void *disp_ = nullptr;
@@ -56,5 +58,6 @@ class NativeLvglUi {
   void *subtitle_ = nullptr;
   void *footer_ = nullptr;
   ColorPattern pattern_ = ColorPattern::kRgb;
+  ColorOrder color_order_ = ColorOrder::kRgb;
 };
 }  // namespace sandbox

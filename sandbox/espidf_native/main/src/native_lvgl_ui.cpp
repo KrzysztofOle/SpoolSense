@@ -64,11 +64,11 @@ const char *pattern_title(ColorPattern pattern) {
 const char *pattern_subtitle(ColorPattern pattern) {
   switch (pattern) {
     case ColorPattern::kRgb:
-      return "A NEXT  B PREV  C RESET";
+      return "A NEXT  B ORDER  C RESET";
     case ColorPattern::kCmy:
-      return "RGB / CMY / WHITE / GRAY";
+      return "A NEXT  B ORDER  C RESET";
     case ColorPattern::kGrayscale:
-      return "BLACK / WHITE / GRAY STEPS";
+      return "A NEXT  B ORDER  C RESET";
   }
 
   return "";
@@ -199,6 +199,10 @@ bool NativeLvglUi::begin(NativeLcd *lcd) {
   }
   disp_ = disp;
 
+  if (!set_color_order(color_order_)) {
+    return false;
+  }
+
   rebuild_screen();
   return true;
 }
@@ -208,14 +212,27 @@ void NativeLvglUi::next_pattern() {
   rebuild_screen();
 }
 
-void NativeLvglUi::previous_pattern() {
-  pattern_ = previous_pattern_of(pattern_);
-  rebuild_screen();
-}
-
 void NativeLvglUi::reset_pattern() {
   pattern_ = ColorPattern::kRgb;
   rebuild_screen();
+}
+
+bool NativeLvglUi::toggle_color_order() {
+  return set_color_order(next_color_order_of(color_order_));
+}
+
+bool NativeLvglUi::set_color_order(ColorOrder order) {
+  if (lcd_ == nullptr) {
+    return false;
+  }
+
+  color_order_ = order;
+  if (lcd_->set_color_order(order) != ESP_OK) {
+    ESP_LOGE("sandbox", "LCD color order update failed");
+    return false;
+  }
+
+  return true;
 }
 
 void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms) {
@@ -223,10 +240,10 @@ void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &c
     return;
   }
 
-  char line_footer[112];
-  std::snprintf(line_footer, sizeof(line_footer), "%s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
-                pattern_name(pattern_), static_cast<int>(buttons.a), static_cast<int>(buttons.b),
-                static_cast<int>(buttons.c), static_cast<unsigned long>(uptime_ms / 1000U),
+  char line_footer[128];
+  std::snprintf(line_footer, sizeof(line_footer), "%s/%s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
+                pattern_name(pattern_), color_order_name(color_order_), static_cast<int>(buttons.a),
+                static_cast<int>(buttons.b), static_cast<int>(buttons.c), static_cast<unsigned long>(uptime_ms / 1000U),
                 static_cast<unsigned long>(counters.a), static_cast<unsigned long>(counters.b),
                 static_cast<unsigned long>(counters.c));
   lv_label_set_text(static_cast<lv_obj_t *>(footer_), line_footer);
@@ -303,16 +320,25 @@ ColorPattern NativeLvglUi::next_pattern_of(ColorPattern pattern) {
   return ColorPattern::kRgb;
 }
 
-ColorPattern NativeLvglUi::previous_pattern_of(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return ColorPattern::kGrayscale;
-    case ColorPattern::kCmy:
-      return ColorPattern::kRgb;
-    case ColorPattern::kGrayscale:
-      return ColorPattern::kCmy;
+const char *NativeLvglUi::color_order_name(ColorOrder order) {
+  switch (order) {
+    case ColorOrder::kRgb:
+      return "RGB";
+    case ColorOrder::kBgr:
+      return "BGR";
   }
 
-  return ColorPattern::kRgb;
+  return "UNK";
+}
+
+ColorOrder NativeLvglUi::next_color_order_of(ColorOrder order) {
+  switch (order) {
+    case ColorOrder::kRgb:
+      return ColorOrder::kBgr;
+    case ColorOrder::kBgr:
+      return ColorOrder::kRgb;
+  }
+
+  return ColorOrder::kRgb;
 }
 }  // namespace sandbox

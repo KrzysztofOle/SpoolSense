@@ -73,7 +73,9 @@ void NativeApp::run() {
       }
       if (is_pressed_edge(buttons.b, last_buttons.b)) {
         ++click_counters.b;
-        ui.previous_pattern();
+        if (!ui.toggle_color_order()) {
+          ESP_LOGE("sandbox", "Color order toggle failed");
+        }
       }
       if (is_pressed_edge(buttons.c, last_buttons.c)) {
         ++click_counters.c;
