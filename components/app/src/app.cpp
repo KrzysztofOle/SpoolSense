@@ -20,6 +20,7 @@
 #include <cstring>
 
 #include <sdkconfig.h>
+#include <esp_timer.h>
 #include <nvs_flash.h>
 #include <esp_system.h>
 
@@ -29,6 +30,7 @@
 #include "display/display.hpp"
 #include "hx711/hx711_monitor.hpp"
 #include "pn532/pn532_reader.hpp"
+#include "spool_tag/spool_tag.hpp"
 
 namespace app {
 namespace {
@@ -101,35 +103,8 @@ constexpr uint32_t kDiagnosticsIntervalMs = 5000;
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
 constexpr uint32_t kScaleStatusDurationMs = 1000;
 constexpr uint32_t kRfidStatusDurationMs = 1200;
-constexpr uint8_t kRfidSampleStartPage = 8;
-constexpr uint8_t kRfidSamplePageCount = 3;
-
-struct RandomSpoolProfile {
-  uint8_t material_code = 0;
-  uint8_t color_code = 0;
-  int16_t reference_weight_g = 0;
-  uint8_t diameter_x10 = 0;
-  uint8_t nozzle_temp_c = 0;
-  uint8_t bed_temp_c = 0;
-};
-
-struct DecodedSpoolProfile {
-  bool valid = false;
-  uint8_t material_code = 0;
-  uint8_t color_code = 0;
-  int16_t reference_weight_g = 0;
-  uint8_t diameter_x10 = 0;
-  uint8_t nozzle_temp_c = 0;
-  uint8_t bed_temp_c = 0;
-};
-
-const char *material_name(uint8_t code) {
-  static constexpr const char *kMaterials[] = {"PLA", "PETG", "ABS", "ASA", "TPU", "NYLON"};
-  if (code >= (sizeof(kMaterials) / sizeof(kMaterials[0]))) {
-    return "PLA";
-  }
-  return kMaterials[code];
-}
+constexpr uint8_t kRfidSampleStartPage = spool_tag::kSpoolTagV1StartPage;
+constexpr uint8_t kRfidSamplePageCount = spool_tag::kSpoolTagV1PageCount;
 
 const char *color_name(uint8_t code) {
   static constexpr const char *kColors[] = {"Black", "White", "Gray", "Red",
@@ -140,83 +115,45 @@ const char *color_name(uint8_t code) {
   return kColors[code];
 }
 
-RandomSpoolProfile make_random_spool_profile(int32_t current_weight_g) {
-  static constexpr int16_t kReferenceWeights[] = {850, 1000, 1200, 1500};
+spool_tag::SpoolTagV1 make_random_spool_profile(int32_t current_weight_g) {
+  static constexpr uint16_t kReferenceWeights[] = {850, 1000, 1200, 1500};
+  static constexpr uint16_t kSpoolCapacities[] = {250, 500, 750, 1000};
   static constexpr uint8_t kNozzleTemps[] = {200, 205, 210, 220, 235, 245};
   static constexpr uint8_t kBedTemps[] = {55, 60, 65, 70, 80, 90};
-  static constexpr uint8_t kDiameterX10[] = {17, 28};
+  static constexpr uint16_t kDiameterX100[] = {175, 285};
+  static constexpr const char *kMaterials[] = {"PLA", "PETG", "ABS", "ASA", "TPU", "NYLON"};
 
-  RandomSpoolProfile profile{};
-  profile.material_code = static_cast<uint8_t>(esp_random() % 6U);  // PLA/PETG/ABS/ASA/TPU/NYLON
-  profile.color_code = static_cast<uint8_t>(esp_random() % 8U);     // 8 popular colors
+  spool_tag::SpoolTagV1 profile{};
+  spool_tag::init_tag(profile);
+  const uint8_t material_index = static_cast<uint8_t>(esp_random() % 6U);
+  const uint8_t color_index = static_cast<uint8_t>(esp_random() % 8U);
+  spool_tag::sanitize_ascii_field(profile.material, sizeof(profile.material), kMaterials[material_index]);
+  spool_tag::sanitize_ascii_field(profile.color, sizeof(profile.color), color_name(color_index));
   const int32_t clamped_current = current_weight_g < 0 ? 0 : current_weight_g;
-  const int16_t fallback_ref =
+  const uint16_t fallback_ref =
       kReferenceWeights[esp_random() % (sizeof(kReferenceWeights) / sizeof(kReferenceWeights[0]))];
   if (clamped_current > 0) {
     const int32_t used_delta = 120 + static_cast<int32_t>(esp_random() % 380U);  // 120..499 g used
     int32_t derived_ref = clamped_current + used_delta;
-    if (derived_ref > 2500) {
-      derived_ref = 2500;
+    if (derived_ref > 65000) {
+      derived_ref = 65000;
     }
-    profile.reference_weight_g = static_cast<int16_t>(derived_ref);
+    profile.reference_weight_g = static_cast<uint16_t>(derived_ref);
   } else {
     profile.reference_weight_g = fallback_ref;
   }
-  profile.diameter_x10 = kDiameterX10[esp_random() % (sizeof(kDiameterX10) / sizeof(kDiameterX10[0]))];
+  profile.last_known_weight_g = static_cast<uint16_t>(clamped_current > 65535 ? 65535 : clamped_current);
+  profile.spool_capacity_g =
+      kSpoolCapacities[esp_random() % (sizeof(kSpoolCapacities) / sizeof(kSpoolCapacities[0]))];
+  profile.initial_filament_g = profile.spool_capacity_g;
+  profile.diameter_x100 =
+      kDiameterX100[esp_random() % (sizeof(kDiameterX100) / sizeof(kDiameterX100[0]))];
   profile.nozzle_temp_c =
       kNozzleTemps[esp_random() % (sizeof(kNozzleTemps) / sizeof(kNozzleTemps[0]))];
   profile.bed_temp_c = kBedTemps[esp_random() % (sizeof(kBedTemps) / sizeof(kBedTemps[0]))];
-  return profile;
-}
-
-void encode_random_profile_payload(const RandomSpoolProfile &profile, uint8_t *buffer, size_t size) {
-  if (buffer == nullptr || size < 12U) {
-    return;
-  }
-
-  std::memset(buffer, 0, size);
-  buffer[0] = 'S';
-  buffer[1] = 'S';
-  buffer[2] = 0x01;  // payload version
-  buffer[3] = profile.material_code;
-  buffer[4] = profile.color_code;
-  buffer[5] = static_cast<uint8_t>(profile.reference_weight_g & 0xFF);
-  buffer[6] = static_cast<uint8_t>((profile.reference_weight_g >> 8) & 0xFF);
-  buffer[7] = profile.diameter_x10;
-  buffer[8] = profile.nozzle_temp_c;
-  buffer[9] = profile.bed_temp_c;
-  buffer[10] = static_cast<uint8_t>(esp_random() & 0xFFU);  // sample batch id
-  uint8_t checksum = 0;
-  for (size_t i = 0; i < 11U; ++i) {
-    checksum ^= buffer[i];
-  }
-  buffer[11] = checksum;
-}
-
-DecodedSpoolProfile decode_profile_payload(const uint8_t *buffer, size_t size) {
-  DecodedSpoolProfile profile{};
-  if (buffer == nullptr || size < 12U) {
-    return profile;
-  }
-  if (buffer[0] != 'S' || buffer[1] != 'S' || buffer[2] != 0x01) {
-    return profile;
-  }
-
-  uint8_t checksum = 0;
-  for (size_t i = 0; i < 11U; ++i) {
-    checksum ^= buffer[i];
-  }
-  if (checksum != buffer[11]) {
-    return profile;
-  }
-
-  profile.valid = true;
-  profile.material_code = buffer[3];
-  profile.color_code = buffer[4];
-  profile.reference_weight_g = static_cast<int16_t>((static_cast<uint16_t>(buffer[6]) << 8) | buffer[5]);
-  profile.diameter_x10 = buffer[7];
-  profile.nozzle_temp_c = buffer[8];
-  profile.bed_temp_c = buffer[9];
+  profile.batch_id = static_cast<uint8_t>(esp_random() & 0xFFU);
+  profile.last_update_unix = static_cast<uint32_t>(esp_timer_get_time() / 1000000LL);
+  profile.flags = 0;
   return profile;
 }
 bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
@@ -231,13 +168,26 @@ void clear_uid(uint8_t *uid) {
   std::memset(uid, 0, kMaxRfidUidLength);
 }
 
+void copy_cstr_truncate(char *dst, size_t dst_size, const char *src) {
+  if (dst == nullptr || dst_size == 0U) {
+    return;
+  }
+  if (src == nullptr) {
+    dst[0] = '\0';
+    return;
+  }
+
+  std::strncpy(dst, src, dst_size - 1U);
+  dst[dst_size - 1U] = '\0';
+}
+
 int32_t raw_to_grams(long raw_value) {
   return static_cast<int32_t>(std::lround(static_cast<double>(raw_value) / kHx711CountsPerGram));
 }
 
 void update_spool_metrics_for_state(AppState &state) {
   const int32_t reference_full_weight_g = state.spool.reference_full_weight_g;
-  const int32_t current_weight_g = state.hx711_has_sample ? state.hx711_weight_grams : 0;
+  const int32_t current_weight_g = state.hx711_has_sample ? state.hx711_weight_grams : state.spool.current_weight_g;
   const int32_t clamped_current_weight_g = current_weight_g < 0 ? 0 : current_weight_g;
 
   state.spool.current_weight_g = current_weight_g;
@@ -247,15 +197,19 @@ void update_spool_metrics_for_state(AppState &state) {
     state.spool.used_weight_g = 0;
   }
 
-  if (reference_full_weight_g <= 0) {
+  if (reference_full_weight_g <= 0 && state.spool.initial_filament_g <= 0) {
     state.spool.valid = false;
     state.spool.remaining_percent = 0;
     return;
   }
 
   state.spool.valid = true;
+  int32_t percent_denominator = reference_full_weight_g;
+  if (state.spool.initial_filament_g > 0) {
+    percent_denominator = state.spool.initial_filament_g;
+  }
   const double remaining_percent =
-      (static_cast<double>(clamped_current_weight_g) / static_cast<double>(reference_full_weight_g)) * 100.0;
+      (static_cast<double>(clamped_current_weight_g) / static_cast<double>(percent_denominator)) * 100.0;
   long rounded_percent = std::lround(remaining_percent);
   if (rounded_percent < 0) {
     rounded_percent = 0;
@@ -354,6 +308,8 @@ bool same_state(const UiState &lhs, const UiState &rhs) {
          lhs.spool.diameter_mm == rhs.spool.diameter_mm &&
          lhs.spool.nozzle_temp_c == rhs.spool.nozzle_temp_c &&
          lhs.spool.bed_temp_c == rhs.spool.bed_temp_c &&
+         lhs.spool.initial_filament_g == rhs.spool.initial_filament_g &&
+         lhs.spool.spool_capacity_g == rhs.spool.spool_capacity_g &&
          lhs.spool.reference_full_weight_g == rhs.spool.reference_full_weight_g &&
          lhs.spool.current_weight_g == rhs.spool.current_weight_g &&
          lhs.spool.used_weight_g == rhs.spool.used_weight_g &&
@@ -675,6 +631,7 @@ void render_state(const UiState &state) {
   }
   std::memcpy(snapshot.rfid.material, state.spool.material, sizeof(snapshot.rfid.material));
   std::memcpy(snapshot.rfid.color, state.spool.color, sizeof(snapshot.rfid.color));
+  snapshot.rfid.tag_weight_g = state.spool.current_weight_g;
   snapshot.rfid.reference_full_weight_g = state.spool.reference_full_weight_g;
   std::memcpy(snapshot.rfid.status_message, state.status_message, sizeof(snapshot.rfid.status_message));
 
@@ -1131,14 +1088,20 @@ void App::handle_rfid_input(AppState &state, const ButtonEvent &event) {
   command.start_page = kRfidSampleStartPage;
   command.page_count = kRfidSamplePageCount;
   command.timestamp_ms = event.timestamp_ms;
-  const RandomSpoolProfile profile = make_random_spool_profile(state.spool.current_weight_g);
-  encode_random_profile_payload(profile, command.data, sizeof(command.data));
+  const spool_tag::SpoolTagV1 profile = make_random_spool_profile(state.spool.current_weight_g);
+  if (!spool_tag::serialize(profile, command.data, sizeof(command.data))) {
+    diagnostics::log_line("RFID save skipped: serialize fail");
+    std::snprintf(state.status_message, sizeof(state.status_message), "SAVE ERROR");
+    state.status_until_ms = event.timestamp_ms + kRfidStatusDurationMs;
+    return;
+  }
 
   char profile_line[96] = {};
-  std::snprintf(profile_line, sizeof(profile_line), "RFID random profile m=%u c=%u ref=%d d=%u n=%u b=%u",
-                static_cast<unsigned>(profile.material_code), static_cast<unsigned>(profile.color_code),
-                static_cast<int>(profile.reference_weight_g), static_cast<unsigned>(profile.diameter_x10),
-                static_cast<unsigned>(profile.nozzle_temp_c), static_cast<unsigned>(profile.bed_temp_c));
+  std::snprintf(profile_line, sizeof(profile_line), "RFID profile %s %s ref=%u last=%u init=%u cap=%u",
+                profile.material, profile.color, static_cast<unsigned>(profile.reference_weight_g),
+                static_cast<unsigned>(profile.last_known_weight_g),
+                static_cast<unsigned>(profile.initial_filament_g),
+                static_cast<unsigned>(profile.spool_capacity_g));
   diagnostics::log_line(profile_line);
 
   if (publish_rfid_command(command)) {
@@ -1203,12 +1166,13 @@ void App::app_task_loop() {
       const AppState before_state = state;
       fsm_.handle_event(state, rfid_event);
       if (rfid_event.kind == RfidEvent::Kind::kCardPresent && rfid_event.profile_available) {
-        std::snprintf(state.spool.material, sizeof(state.spool.material), "%s",
-                      material_name(rfid_event.profile_material_code));
-        std::snprintf(state.spool.color, sizeof(state.spool.color), "%s",
-                      color_name(rfid_event.profile_color_code));
+        copy_cstr_truncate(state.spool.material, sizeof(state.spool.material), rfid_event.profile_material);
+        copy_cstr_truncate(state.spool.color, sizeof(state.spool.color), rfid_event.profile_color);
         state.spool.reference_full_weight_g = rfid_event.profile_reference_weight_g;
-        state.spool.diameter_mm = static_cast<float>(rfid_event.profile_diameter_x10) / 10.0f;
+        state.spool.current_weight_g = rfid_event.profile_last_known_weight_g;
+        state.spool.initial_filament_g = rfid_event.profile_initial_filament_g;
+        state.spool.spool_capacity_g = rfid_event.profile_spool_capacity_g;
+        state.spool.diameter_mm = static_cast<float>(rfid_event.profile_diameter_x100) / 100.0f;
         state.spool.nozzle_temp_c = static_cast<int16_t>(rfid_event.profile_nozzle_temp_c);
         state.spool.bed_temp_c = static_cast<int16_t>(rfid_event.profile_bed_temp_c);
       }
@@ -1414,7 +1378,7 @@ void App::rfid_task_loop() {
       std::memset(event.usage_page, 0, sizeof(event.usage_page));
     }
 
-    uint8_t profile_payload[12] = {};
+    uint8_t profile_payload[spool_tag::kSpoolTagV1PayloadSize] = {};
     bool profile_read_ok = true;
     for (uint8_t i = 0; i < kRfidSamplePageCount; ++i) {
       uint8_t page_data[4] = {};
@@ -1425,16 +1389,42 @@ void App::rfid_task_loop() {
       std::memcpy(&profile_payload[i * 4], page_data, sizeof(page_data));
     }
     if (profile_read_ok) {
-      const DecodedSpoolProfile profile = decode_profile_payload(profile_payload, sizeof(profile_payload));
-      if (profile.valid) {
+      const spool_tag::ParsedSpoolTagV1 parsed = spool_tag::parse(profile_payload, sizeof(profile_payload));
+      if (parsed.valid) {
         event.profile_available = true;
-        event.profile_material_code = profile.material_code;
-        event.profile_color_code = profile.color_code;
-        event.profile_reference_weight_g = profile.reference_weight_g;
-        event.profile_diameter_x10 = profile.diameter_x10;
-        event.profile_nozzle_temp_c = profile.nozzle_temp_c;
-        event.profile_bed_temp_c = profile.bed_temp_c;
+        std::snprintf(event.profile_material, sizeof(event.profile_material), "%s", parsed.tag.material);
+        std::snprintf(event.profile_color, sizeof(event.profile_color), "%s", parsed.tag.color);
+        event.profile_reference_weight_g = parsed.tag.reference_weight_g;
+        event.profile_last_known_weight_g = parsed.tag.last_known_weight_g;
+        event.profile_initial_filament_g = parsed.tag.initial_filament_g;
+        event.profile_spool_capacity_g = parsed.tag.spool_capacity_g;
+        event.profile_diameter_x100 = parsed.tag.diameter_x100;
+        event.profile_nozzle_temp_c = parsed.tag.nozzle_temp_c;
+        event.profile_bed_temp_c = parsed.tag.bed_temp_c;
+        event.profile_batch_id = parsed.tag.batch_id;
+        event.profile_last_update_unix = parsed.tag.last_update_unix;
+        event.profile_flags = parsed.tag.flags;
+
+        const uint32_t now_unix = static_cast<uint32_t>(esp_timer_get_time() / 1000000LL);
+        const uint32_t age_days =
+            (now_unix > parsed.tag.last_update_unix) ? (now_unix - parsed.tag.last_update_unix) / 86400U : 0U;
+        char tag_line[128] = {};
+        std::snprintf(tag_line, sizeof(tag_line),
+                      "RFID tag parsed Material:%s Color:%s Last:%ug Init:%ug Cap:%ug Age:%lu days",
+                      parsed.tag.material, parsed.tag.color,
+                      static_cast<unsigned>(parsed.tag.last_known_weight_g),
+                      static_cast<unsigned>(parsed.tag.initial_filament_g),
+                      static_cast<unsigned>(parsed.tag.spool_capacity_g),
+                      static_cast<unsigned long>(age_days));
+        diagnostics::log_line(tag_line);
+      } else {
+        char invalid_line[96] = {};
+        std::snprintf(invalid_line, sizeof(invalid_line), "RFID profile invalid ver=%u crc=%u",
+                      static_cast<unsigned>(parsed.supported_version), static_cast<unsigned>(parsed.crc_ok));
+        diagnostics::log_line(invalid_line);
       }
+    } else {
+      diagnostics::log_line("RFID profile read failed");
     }
 
     if (!publish_rfid_event(event)) {

@@ -10,6 +10,7 @@ set(EXTRA_COMPONENT_DIRS
     "components/display"
     "components/hx711"
     "components/pn532"
+    "components/spool_tag"
 )
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

@@ -52,12 +52,18 @@ struct RfidEvent {
   uint32_t usage_seconds = 0;
   uint8_t life_percent = 0;
   bool profile_available = false;
-  uint8_t profile_material_code = 0;
-  uint8_t profile_color_code = 0;
-  int16_t profile_reference_weight_g = 0;
-  uint8_t profile_diameter_x10 = 0;
+  char profile_material[16] = {};
+  char profile_color[24] = {};
+  uint16_t profile_reference_weight_g = 0;
+  uint16_t profile_last_known_weight_g = 0;
+  uint16_t profile_initial_filament_g = 0;
+  uint16_t profile_spool_capacity_g = 0;
+  uint16_t profile_diameter_x100 = 0;
   uint8_t profile_nozzle_temp_c = 0;
   uint8_t profile_bed_temp_c = 0;
+  uint8_t profile_batch_id = 0;
+  uint32_t profile_last_update_unix = 0;
+  uint8_t profile_flags = 0;
   bool write_success = false;
   uint32_t timestamp_ms = 0;
 };
@@ -94,7 +100,7 @@ struct RfidCommand {
   Kind kind = Kind::kWriteSampleData;
   uint8_t start_page = 0;
   uint8_t page_count = 0;
-  uint8_t data[16] = {};
+  uint8_t data[64] = {};
   uint32_t timestamp_ms = 0;
 };
 

@@ -65,6 +65,8 @@ struct SpoolData {
   float diameter_mm = 1.75f;
   int16_t nozzle_temp_c = 0;
   int16_t bed_temp_c = 0;
+  int32_t initial_filament_g = 0;
+  int32_t spool_capacity_g = 0;
   int32_t reference_full_weight_g = 0;
   int32_t current_weight_g = 0;
   int32_t used_weight_g = 0;

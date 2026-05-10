@@ -748,17 +748,17 @@ class NativeDisplay {
       lv_label_set_text(rfid_labels_[3], "");
     } else {
       char line[80] = {};
-      std::snprintf(line, sizeof(line), "UID: %s", snapshot.uid[0] == '\0' ? "-" : snapshot.uid);
-      lv_label_set_text(rfid_labels_[0], line);
       std::snprintf(line, sizeof(line), "Material: %s", snapshot.material[0] == '\0' ? "-" : snapshot.material);
-      lv_label_set_text(rfid_labels_[1], line);
+      lv_label_set_text(rfid_labels_[0], line);
       if (snapshot.status_message[0] != '\0') {
         std::snprintf(line, sizeof(line), "%s", snapshot.status_message);
       } else {
         std::snprintf(line, sizeof(line), "Color: %s", snapshot.color[0] == '\0' ? "-" : snapshot.color);
       }
-      lv_label_set_text(rfid_labels_[2], line);
+      lv_label_set_text(rfid_labels_[1], line);
       std::snprintf(line, sizeof(line), "Ref: %ld g", static_cast<long>(snapshot.reference_full_weight_g));
+      lv_label_set_text(rfid_labels_[2], line);
+      std::snprintf(line, sizeof(line), "Tag weight: %ld g", static_cast<long>(snapshot.tag_weight_g));
       lv_label_set_text(rfid_labels_[3], line);
     }
     refresh_footer("PREV", "SAVE TAG", "NEXT");
@@ -811,6 +811,7 @@ class NativeDisplay {
            std::memcmp(lhs.uid, rhs.uid, sizeof(lhs.uid)) == 0 &&
            std::memcmp(lhs.material, rhs.material, sizeof(lhs.material)) == 0 &&
            std::memcmp(lhs.color, rhs.color, sizeof(lhs.color)) == 0 &&
+           lhs.tag_weight_g == rhs.tag_weight_g &&
            lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
            std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0;
   }

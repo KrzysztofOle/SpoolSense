@@ -9,4 +9,5 @@ set(SPOLSENSE_COMPONENTS
     display
     hx711
     pn532
+    spool_tag
 )

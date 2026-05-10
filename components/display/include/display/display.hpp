@@ -51,6 +51,7 @@ struct RfidSnapshot {
   char uid[32] = {};
   char material[12] = {};
   char color[16] = {};
+  int32_t tag_weight_g = 0;
   int32_t reference_full_weight_g = 0;
   char status_message[32] = {};
 };
