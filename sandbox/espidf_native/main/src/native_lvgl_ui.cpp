@@ -3,7 +3,7 @@
  *
  * Features (EN):
  * - Configures LVGL display buffers and flush callback for NativeLcd.
- * - Shows a dedicated LCD color test with large swatches.
+ * - Shows switchable LCD color test patterns with large swatches.
  * - Keeps frame updates lightweight while staying fully native ESP-IDF.
  *
  * Funkcje (PL):
@@ -16,6 +16,7 @@
 
 #include "sandbox/native_lvgl_ui.hpp"
 
+#include <array>
 #include <cstdio>
 
 #include "esp_log.h"
@@ -35,6 +36,93 @@ struct ColorSwatch {
   lv_color_t text_color;
 };
 
+constexpr lv_coord_t k_title_y = 8;
+constexpr lv_coord_t k_subtitle_y = 34;
+constexpr lv_coord_t k_grid_top = 68;
+constexpr lv_coord_t k_grid_left = 15;
+constexpr lv_coord_t k_swatch_w = 68;
+constexpr lv_coord_t k_swatch_h = 56;
+constexpr lv_coord_t k_gap_x = 6;
+constexpr lv_coord_t k_gap_y = 10;
+constexpr lv_coord_t k_footer_y = -10;
+
+constexpr int k_swatch_count = 8;
+
+const char *pattern_title(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return "LCD COLOR TEST - RGB";
+    case ColorPattern::kCmy:
+      return "LCD COLOR TEST - CMY";
+    case ColorPattern::kGrayscale:
+      return "LCD COLOR TEST - GRAY";
+  }
+
+  return "LCD COLOR TEST";
+}
+
+const char *pattern_subtitle(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return "A NEXT  B PREV  C RESET";
+    case ColorPattern::kCmy:
+      return "RGB / CMY / WHITE / GRAY";
+    case ColorPattern::kGrayscale:
+      return "BLACK / WHITE / GRAY STEPS";
+  }
+
+  return "";
+}
+
+std::array<ColorSwatch, k_swatch_count> make_swatches(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return {{
+          {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
+          {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
+          {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
+          {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
+          {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
+          {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
+          {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
+          {"BK", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      }};
+    case ColorPattern::kCmy:
+      return {{
+          {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
+          {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
+          {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
+          {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
+          {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
+          {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
+          {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
+          {"BK", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      }};
+    case ColorPattern::kGrayscale:
+      return {{
+          {"0", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+          {"1", lv_color_hex(0x202020), lv_color_hex(0xFFFFFF)},
+          {"2", lv_color_hex(0x404040), lv_color_hex(0xFFFFFF)},
+          {"3", lv_color_hex(0x606060), lv_color_hex(0xFFFFFF)},
+          {"4", lv_color_hex(0x808080), lv_color_hex(0xFFFFFF)},
+          {"5", lv_color_hex(0xA0A0A0), lv_color_hex(0x000000)},
+          {"6", lv_color_hex(0xC0C0C0), lv_color_hex(0x000000)},
+          {"7", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
+      }};
+  }
+
+  return {{
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+  }};
+}
+
 void create_swatch(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
                    const ColorSwatch &swatch) {
   auto *box = lv_obj_create(parent);
@@ -53,6 +141,12 @@ void create_swatch(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, l
   lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_label_set_text(label, swatch.label);
   lv_obj_center(label);
+}
+
+void clear_screen(lv_obj_t *scr) {
+  lv_obj_clean(scr);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
 }
 
 void flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p) {
@@ -105,60 +199,23 @@ bool NativeLvglUi::begin(NativeLcd *lcd) {
   }
   disp_ = disp;
 
-  auto *scr = lv_scr_act();
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
-
-  auto *title = lv_label_create(scr);
-  lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(title, "LCD COLOR TEST");
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
-  title_ = title;
-
-  auto *subtitle = lv_label_create(scr);
-  lv_obj_set_style_text_color(subtitle, lv_color_hex(0xA0A0A0), LV_PART_MAIN);
-  lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_label_set_text(subtitle, "RGB / CMY / WHITE / GRAY");
-  lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 34);
-  subtitle_ = subtitle;
-
-  constexpr lv_coord_t k_swatch_w = 68;
-  constexpr lv_coord_t k_swatch_h = 56;
-  constexpr lv_coord_t k_gap_x = 6;
-  constexpr lv_coord_t k_gap_y = 10;
-  constexpr lv_coord_t k_left = 15;
-  constexpr lv_coord_t k_top = 68;
-
-  const ColorSwatch swatches[] = {
-      {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
-      {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
-      {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
-      {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
-      {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
-      {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
-      {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
-      {"GRAY", lv_color_hex(0x808080), lv_color_hex(0xFFFFFF)},
-  };
-
-  constexpr int k_swatch_count = static_cast<int>(sizeof(swatches) / sizeof(swatches[0]));
-  for (int index = 0; index < k_swatch_count; ++index) {
-    const int column = index % 4;
-    const int row = index / 4;
-    const lv_coord_t x = k_left + static_cast<lv_coord_t>(column) * (k_swatch_w + k_gap_x);
-    const lv_coord_t y = k_top + static_cast<lv_coord_t>(row) * (k_swatch_h + k_gap_y);
-    create_swatch(scr, x, y, k_swatch_w, k_swatch_h, swatches[index]);
-  }
-
-  auto *footer = lv_label_create(scr);
-  lv_obj_set_style_text_color(footer, lv_color_hex(0xC0C0C0), LV_PART_MAIN);
-  lv_obj_set_style_text_font(footer, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_label_set_text(footer, "BTN A:0 B:0 C:0 | UP 0s");
-  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -10);
-  footer_ = footer;
-
-  lv_refr_now(nullptr);
+  rebuild_screen();
   return true;
+}
+
+void NativeLvglUi::next_pattern() {
+  pattern_ = next_pattern_of(pattern_);
+  rebuild_screen();
+}
+
+void NativeLvglUi::previous_pattern() {
+  pattern_ = previous_pattern_of(pattern_);
+  rebuild_screen();
+}
+
+void NativeLvglUi::reset_pattern() {
+  pattern_ = ColorPattern::kRgb;
+  rebuild_screen();
 }
 
 void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms) {
@@ -166,11 +223,12 @@ void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &c
     return;
   }
 
-  char line_footer[96];
-  std::snprintf(line_footer, sizeof(line_footer), "BTN A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
-                static_cast<int>(buttons.a), static_cast<int>(buttons.b), static_cast<int>(buttons.c),
-                static_cast<unsigned long>(uptime_ms / 1000U), static_cast<unsigned long>(counters.a),
-                static_cast<unsigned long>(counters.b), static_cast<unsigned long>(counters.c));
+  char line_footer[112];
+  std::snprintf(line_footer, sizeof(line_footer), "%s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
+                pattern_name(pattern_), static_cast<int>(buttons.a), static_cast<int>(buttons.b),
+                static_cast<int>(buttons.c), static_cast<unsigned long>(uptime_ms / 1000U),
+                static_cast<unsigned long>(counters.a), static_cast<unsigned long>(counters.b),
+                static_cast<unsigned long>(counters.c));
   lv_label_set_text(static_cast<lv_obj_t *>(footer_), line_footer);
 }
 
@@ -180,5 +238,81 @@ void NativeLvglUi::tick(uint32_t elapsed_ms) {
 
 void NativeLvglUi::process() {
   lv_timer_handler();
+}
+
+void NativeLvglUi::rebuild_screen() {
+  auto *scr = lv_scr_act();
+  clear_screen(scr);
+
+  auto *title = lv_label_create(scr);
+  lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_22, LV_PART_MAIN);
+  lv_label_set_text(title, pattern_title(pattern_));
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, k_title_y);
+  title_ = title;
+
+  auto *subtitle = lv_label_create(scr);
+  lv_obj_set_style_text_color(subtitle, lv_color_hex(0xA0A0A0), LV_PART_MAIN);
+  lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_label_set_text(subtitle, pattern_subtitle(pattern_));
+  lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, k_subtitle_y);
+  subtitle_ = subtitle;
+
+  const auto swatches = make_swatches(pattern_);
+  for (int index = 0; index < k_swatch_count; ++index) {
+    const int column = index % 4;
+    const int row = index / 4;
+    const lv_coord_t x = k_grid_left + static_cast<lv_coord_t>(column) * (k_swatch_w + k_gap_x);
+    const lv_coord_t y = k_grid_top + static_cast<lv_coord_t>(row) * (k_swatch_h + k_gap_y);
+    create_swatch(scr, x, y, k_swatch_w, k_swatch_h, swatches[index]);
+  }
+
+  auto *footer = lv_label_create(scr);
+  lv_obj_set_style_text_color(footer, lv_color_hex(0xC0C0C0), LV_PART_MAIN);
+  lv_obj_set_style_text_font(footer, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_label_set_text(footer, "");
+  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, k_footer_y);
+  footer_ = footer;
+
+  lv_refr_now(nullptr);
+}
+
+const char *NativeLvglUi::pattern_name(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return "RGB";
+    case ColorPattern::kCmy:
+      return "CMY";
+    case ColorPattern::kGrayscale:
+      return "GRAY";
+  }
+
+  return "UNKNOWN";
+}
+
+ColorPattern NativeLvglUi::next_pattern_of(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return ColorPattern::kCmy;
+    case ColorPattern::kCmy:
+      return ColorPattern::kGrayscale;
+    case ColorPattern::kGrayscale:
+      return ColorPattern::kRgb;
+  }
+
+  return ColorPattern::kRgb;
+}
+
+ColorPattern NativeLvglUi::previous_pattern_of(ColorPattern pattern) {
+  switch (pattern) {
+    case ColorPattern::kRgb:
+      return ColorPattern::kGrayscale;
+    case ColorPattern::kCmy:
+      return ColorPattern::kRgb;
+    case ColorPattern::kGrayscale:
+      return ColorPattern::kCmy;
+  }
+
+  return ColorPattern::kRgb;
 }
 }  // namespace sandbox
