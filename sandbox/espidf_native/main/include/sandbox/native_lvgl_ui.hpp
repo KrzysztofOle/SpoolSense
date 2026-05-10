@@ -3,12 +3,12 @@
  *
  * Features (EN):
  * - Initializes LVGL with a native ESP-IDF LCD backend.
- * - Renders a compact status UI with button states and counters.
+ * - Renders a dedicated LCD color test with large swatches.
  * - Exposes a lightweight update loop for the main runtime.
  *
  * Funkcje (PL):
  * - Inicjalizuje LVGL z natywnym backendem LCD dla ESP-IDF.
- * - Renderuje kompaktowy UI ze stanem przyciskow i licznikami.
+ * - Renderuje dedykowany test kolorow LCD z duzymi kwadratami.
  * - Udostepnia lekka petle aktualizacji dla glownego runtime.
  *
  * File: sandbox/espidf_native/main/include/sandbox/native_lvgl_ui.hpp
@@ -39,8 +39,7 @@ class NativeLvglUi {
   NativeLcd *lcd_ = nullptr;
   void *disp_ = nullptr;
   void *title_ = nullptr;
-  void *buttons_ = nullptr;
-  void *counters_ = nullptr;
-  void *uptime_ = nullptr;
+  void *subtitle_ = nullptr;
+  void *footer_ = nullptr;
 };
 }  // namespace sandbox

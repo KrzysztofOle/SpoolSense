@@ -3,12 +3,12 @@
  *
  * Features (EN):
  * - Configures LVGL display buffers and flush callback for NativeLcd.
- * - Shows button states and click counters on a simple dashboard screen.
+ * - Shows a dedicated LCD color test with large swatches.
  * - Keeps frame updates lightweight while staying fully native ESP-IDF.
  *
  * Funkcje (PL):
  * - Konfiguruje bufory LVGL i flush callback dla NativeLcd.
- * - Pokazuje stany przyciskow i liczniki klikniec na prostym ekranie.
+ * - Pokazuje plansze kolorow z duzymi kwadratami do oceny LCD.
  * - Utrzymuje lekkie aktualizacje klatek bez Arduino.
  *
  * File: sandbox/espidf_native/main/src/native_lvgl_ui.cpp
@@ -28,6 +28,32 @@ static lv_color_t s_draw_buffer[NativeLcd::kWidth * k_draw_buffer_lines];
 static uint16_t s_flush_color_buffer[NativeLcd::kWidth * k_draw_buffer_lines];
 static lv_disp_draw_buf_t s_draw_ctx;
 static lv_disp_drv_t s_disp_drv;
+
+struct ColorSwatch {
+  const char *label;
+  lv_color_t color;
+  lv_color_t text_color;
+};
+
+void create_swatch(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
+                   const ColorSwatch &swatch) {
+  auto *box = lv_obj_create(parent);
+  lv_obj_remove_style_all(box);
+  lv_obj_set_pos(box, x, y);
+  lv_obj_set_size(box, w, h);
+  lv_obj_set_style_bg_color(box, swatch.color, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(box, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_radius(box, 6, LV_PART_MAIN);
+  lv_obj_set_style_border_width(box, 2, LV_PART_MAIN);
+  lv_obj_set_style_border_color(box, lv_color_hex(0x202020), LV_PART_MAIN);
+  lv_obj_set_style_pad_all(box, 4, LV_PART_MAIN);
+
+  auto *label = lv_label_create(box);
+  lv_obj_set_style_text_color(label, swatch.text_color, LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_label_set_text(label, swatch.label);
+  lv_obj_center(label);
+}
 
 void flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p) {
   auto *lcd = static_cast<NativeLcd *>(disp_drv->user_data);
@@ -86,74 +112,66 @@ bool NativeLvglUi::begin(NativeLcd *lcd) {
   auto *title = lv_label_create(scr);
   lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(title, "sandbox/espidf_native");
-  lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, 10);
+  lv_label_set_text(title, "LCD COLOR TEST");
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
   title_ = title;
 
-  auto *buttons = lv_label_create(scr);
-  lv_obj_set_style_text_color(buttons, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(buttons, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(buttons, "Buttons A:0 B:0 C:0");
-  lv_obj_align(buttons, LV_ALIGN_TOP_LEFT, 10, 64);
-  buttons_ = buttons;
+  auto *subtitle = lv_label_create(scr);
+  lv_obj_set_style_text_color(subtitle, lv_color_hex(0xA0A0A0), LV_PART_MAIN);
+  lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_label_set_text(subtitle, "RGB / CMY / WHITE / GRAY");
+  lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 34);
+  subtitle_ = subtitle;
 
-  auto *counters = lv_label_create(scr);
-  lv_obj_set_style_text_color(counters, lv_color_hex(0x00E5FF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(counters, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(counters, "Clicks  A:0 B:0 C:0");
-  lv_obj_align(counters, LV_ALIGN_TOP_LEFT, 10, 108);
-  counters_ = counters;
+  constexpr lv_coord_t k_swatch_w = 68;
+  constexpr lv_coord_t k_swatch_h = 56;
+  constexpr lv_coord_t k_gap_x = 6;
+  constexpr lv_coord_t k_gap_y = 10;
+  constexpr lv_coord_t k_left = 15;
+  constexpr lv_coord_t k_top = 68;
 
-  auto *uptime = lv_label_create(scr);
-  lv_obj_set_style_text_color(uptime, lv_color_hex(0xFFD54F), LV_PART_MAIN);
-  lv_obj_set_style_text_font(uptime, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(uptime, "Uptime: 0s");
-  lv_obj_align(uptime, LV_ALIGN_TOP_LEFT, 10, 152);
-  uptime_ = uptime;
-
-  auto make_rgb_box = [scr](lv_coord_t x, lv_coord_t y, lv_color_t color, const char *text) {
-    auto *box = lv_obj_create(scr);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, 64, 28);
-    lv_obj_set_pos(box, x, y);
-    lv_obj_set_style_bg_color(box, color, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(box, 4, LV_PART_MAIN);
-
-    auto *label = lv_label_create(box);
-    lv_obj_set_style_text_color(label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_22, LV_PART_MAIN);
-    lv_label_set_text(label, text);
-    lv_obj_center(label);
+  const ColorSwatch swatches[] = {
+      {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
+      {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
+      {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
+      {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
+      {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
+      {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
+      {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
+      {"GRAY", lv_color_hex(0x808080), lv_color_hex(0xFFFFFF)},
   };
 
-  make_rgb_box(10, 204, lv_color_hex(0xD50000), "R");
-  make_rgb_box(88, 204, lv_color_hex(0x00A000), "G");
-  make_rgb_box(166, 204, lv_color_hex(0x0040FF), "B");
+  constexpr int k_swatch_count = static_cast<int>(sizeof(swatches) / sizeof(swatches[0]));
+  for (int index = 0; index < k_swatch_count; ++index) {
+    const int column = index % 4;
+    const int row = index / 4;
+    const lv_coord_t x = k_left + static_cast<lv_coord_t>(column) * (k_swatch_w + k_gap_x);
+    const lv_coord_t y = k_top + static_cast<lv_coord_t>(row) * (k_swatch_h + k_gap_y);
+    create_swatch(scr, x, y, k_swatch_w, k_swatch_h, swatches[index]);
+  }
+
+  auto *footer = lv_label_create(scr);
+  lv_obj_set_style_text_color(footer, lv_color_hex(0xC0C0C0), LV_PART_MAIN);
+  lv_obj_set_style_text_font(footer, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_label_set_text(footer, "BTN A:0 B:0 C:0 | UP 0s");
+  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -10);
+  footer_ = footer;
 
   lv_refr_now(nullptr);
   return true;
 }
 
 void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms) {
-  if (buttons_ == nullptr || counters_ == nullptr || uptime_ == nullptr) {
+  if (footer_ == nullptr) {
     return;
   }
 
-  char line_buttons[64];
-  std::snprintf(line_buttons, sizeof(line_buttons), "Buttons A:%d B:%d C:%d",
-                static_cast<int>(buttons.a), static_cast<int>(buttons.b), static_cast<int>(buttons.c));
-  lv_label_set_text(static_cast<lv_obj_t *>(buttons_), line_buttons);
-
-  char line_counters[64];
-  std::snprintf(line_counters, sizeof(line_counters), "Clicks  A:%lu B:%lu C:%lu",
-                static_cast<unsigned long>(counters.a), static_cast<unsigned long>(counters.b),
-                static_cast<unsigned long>(counters.c));
-  lv_label_set_text(static_cast<lv_obj_t *>(counters_), line_counters);
-
-  char line_uptime[48];
-  std::snprintf(line_uptime, sizeof(line_uptime), "Uptime: %lus", static_cast<unsigned long>(uptime_ms / 1000U));
-  lv_label_set_text(static_cast<lv_obj_t *>(uptime_), line_uptime);
+  char line_footer[96];
+  std::snprintf(line_footer, sizeof(line_footer), "BTN A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
+                static_cast<int>(buttons.a), static_cast<int>(buttons.b), static_cast<int>(buttons.c),
+                static_cast<unsigned long>(uptime_ms / 1000U), static_cast<unsigned long>(counters.a),
+                static_cast<unsigned long>(counters.b), static_cast<unsigned long>(counters.c));
+  lv_label_set_text(static_cast<lv_obj_t *>(footer_), line_footer);
 }
 
 void NativeLvglUi::tick(uint32_t elapsed_ms) {
