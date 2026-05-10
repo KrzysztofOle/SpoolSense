@@ -1,6 +1,6 @@
 # SpoolSense - architektura UI LCD + 3 przyciski
 
-<small>Ostatnia aktualizacja: 2026-05-10T12:49:48+02:00</small>
+<small>Ostatnia aktualizacja: 2026-05-10T13:20:00+02:00</small>
 
 ## Zakres
 
@@ -68,22 +68,15 @@ empty_spool_weight_g
 
 Nie należy mylić go z `reference_full_weight_g`.
 
-## Proponowany rekord szpuli
+## Rekord RFID/NFC (SpoolTagV1)
 
-```json
-{
-  "schema": 1,
-  "material": "PLA",
-  "color": "Black",
-  "diameter_mm": 1.75,
-  "manufacturer": "Prusa",
-  "nozzle_temp_c": 215,
-  "bed_temp_c": 60,
-  "reference_full_weight_g": 1000,
-  "drying_profile": "PLA_45C_4H",
-  "last_dried_at": "2026-05-10T12:49:48+02:00"
-}
-```
+Aktualny kierunek to format binarny `SpoolTagV1` (bez JSON na tagu NFC), jako stabilniejsza wersja po MVP/prototypie.
+
+- pola tekstowe: `material[16]`, `color[24]` (ASCII, fixed-length)
+- pola liczbowe: binarne (`uint16_t`, `uint32_t`)
+- integralnosc: `CRC16-CCITT`
+- wersjonowanie: `version`
+- rola: offline snapshot szpuli, a nie docelowa baza danych
 
 ## Proponowany komponent UI
 

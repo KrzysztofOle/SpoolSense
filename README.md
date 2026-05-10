@@ -2,7 +2,7 @@
 
 Polish version: [README_PL.md](README_PL.md)
 
-<small>Last updated: 2026-05-10T12:32:00+02:00</small>
+<small>Last updated: 2026-05-10T13:55:00+02:00</small>
 
 SpoolSense is a smart filament spool scale designed for 3D printing environments.  
 It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
@@ -159,6 +159,7 @@ Expected messages:
 - `components/app` - firmware orchestration and FreeRTOS task lifecycle
 - `components/board` - pin assignments and board-level bus setup
 - `components/pn532` - RFID logic plus local Arduino PN532 compatibility sources
+- `components/spool_tag` - stable SpoolTagV1 binary payload format (serialize/parse/CRC16)
 - `components/hx711` - HX711 polling plus local Arduino HX711 compatibility source
 - `components/display` - M5 display handling
 - `components/diagnostics` - logging and formatting helpers
@@ -219,6 +220,53 @@ The monitor baud rate is `115200`. If the serial port changes, update the VS Cod
 ## ⚠️ Status
 
 Project in early development stage.
+
+## RFID/NFC SpoolTagV1
+
+The original RFID payload was an MVP/prototype record used for early bring-up.
+The firmware now uses `SpoolTagV1` as the first stable embedded payload protocol for spool snapshots.
+
+Role of RFID/NFC in SpoolSense:
+
+- offline spool snapshot
+- spool identity + material basics
+- last known weight state without HX711 dependency
+- compact and embedded-friendly payload (no JSON on tag)
+
+`SpoolTagV1` layout:
+
+```c
+struct SpoolTagV1 {
+  char magic[2];                // \"SS\"
+  uint8_t version;              // 2
+  char material[16];            // fixed ASCII
+  char color[24];               // fixed ASCII
+  uint16_t reference_weight_g;
+  uint16_t last_known_weight_g;
+  uint16_t initial_filament_g;  // initial filament amount
+  uint16_t spool_capacity_g;    // nominal spool capacity
+  uint16_t diameter_x100;       // 175 = 1.75 mm
+  uint8_t nozzle_temp_c;
+  uint8_t bed_temp_c;
+  uint8_t batch_id;
+  uint32_t last_update_unix;
+  uint8_t flags;
+  uint16_t crc16;               // CRC16-CCITT
+};
+```
+
+NTAG memory mapping for the payload:
+
+- start page: `8`
+- payload size: `63` bytes
+- page count: `16` pages
+
+Validation rules:
+
+- magic must be `SS`
+- schema version must be supported
+- CRC16 must match
+- unsupported or damaged records are rejected safely and logged
 
 ## 📜 License
 
