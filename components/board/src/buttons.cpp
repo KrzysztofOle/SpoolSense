@@ -27,7 +27,6 @@ ButtonSnapshot read_buttons() {
   snapshot.c = gpio_get_level(static_cast<gpio_num_t>(kBtnCPin)) == 0;
   return snapshot;
 }
-}
 }  // namespace
 
 void ButtonController::begin() {

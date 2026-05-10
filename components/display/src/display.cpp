@@ -528,7 +528,7 @@ class NativeDisplay {
     for (size_t index = 0; index < home_info_labels_.size(); ++index) {
       home_info_labels_[index] = lv_label_create(scr);
       lv_obj_set_style_text_color(home_info_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-      lv_obj_set_style_text_font(home_info_labels_[index], &lv_font_montserrat_16, LV_PART_MAIN);
+      lv_obj_set_style_text_font(home_info_labels_[index], &lv_font_montserrat_14, LV_PART_MAIN);
       lv_obj_set_style_text_align(home_info_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
       lv_obj_set_width(home_info_labels_[index], NativeLcd::kWidth - 24);
       lv_obj_set_pos(home_info_labels_[index], k_line_x,
@@ -554,7 +554,7 @@ class NativeDisplay {
 
     home_remain_label_ = lv_label_create(scr);
     lv_obj_set_style_text_color(home_remain_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_text_font(home_remain_label_, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_set_style_text_font(home_remain_label_, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_obj_set_pos(home_remain_label_, k_line_x, k_home_bar_text_y);
   }
 
@@ -671,7 +671,11 @@ class NativeDisplay {
     lv_label_set_text(scale_labels_[0], line);
     std::snprintf(line, sizeof(line), "Ref:    %ld g", static_cast<long>(snapshot.reference_full_weight_g));
     lv_label_set_text(scale_labels_[1], line);
-    lv_label_set_text(scale_labels_[2], "A: Tara  B: Save Ref");
+    if (snapshot.status_message[0] != '\0') {
+      lv_label_set_text(scale_labels_[2], snapshot.status_message);
+    } else {
+      lv_label_set_text(scale_labels_[2], "A: Tara  B: Save Ref");
+    }
 
     lv_timer_handler();
     lv_refr_now(nullptr);
@@ -712,7 +716,8 @@ class NativeDisplay {
 
   static bool is_same_scale_snapshot(const ScaleSnapshot &lhs, const ScaleSnapshot &rhs) {
     return lhs.current_weight_g == rhs.current_weight_g &&
-           lhs.reference_full_weight_g == rhs.reference_full_weight_g;
+           lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
+           std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0;
   }
 
   static bool is_same_ui_snapshot(const UiSnapshot &lhs, const UiSnapshot &rhs) {

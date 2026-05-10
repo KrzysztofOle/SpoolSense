@@ -114,6 +114,8 @@ struct AppState {
   uint32_t hx711_zeroed_ms = 0;
   ButtonKind last_button = ButtonKind::kNone;
   uint32_t last_button_ms = 0;
+  char status_message[32] = {};
+  uint32_t status_until_ms = 0;
 };
 
 struct UiState {
@@ -142,5 +144,7 @@ struct UiState {
   uint32_t hx711_zeroed_ms = 0;
   ButtonKind last_button = ButtonKind::kNone;
   uint32_t last_button_ms = 0;
+  char status_message[32] = {};
+  uint32_t status_until_ms = 0;
 };
 }  // namespace app

@@ -98,6 +98,7 @@ constexpr uint32_t kHx711MissingTimeoutMs = 500;
 constexpr float kHx711CountsPerGram = 1000.0f;
 constexpr uint32_t kDiagnosticsIntervalMs = 5000;
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
+constexpr uint32_t kScaleStatusDurationMs = 1000;
 bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
   if (uid_length == 0) {
     return false;
@@ -214,6 +215,8 @@ UiState to_ui_state(const AppState &state) {
   ui_state.hx711_zeroed_ms = state.hx711_zeroed_ms;
   ui_state.last_button = state.last_button;
   ui_state.last_button_ms = state.last_button_ms;
+  std::memcpy(ui_state.status_message, state.status_message, sizeof(ui_state.status_message));
+  ui_state.status_until_ms = state.status_until_ms;
   if (state.rfid_has_uid) {
     std::memcpy(ui_state.rfid_uid, state.rfid_uid, sizeof(ui_state.rfid_uid));
   }
@@ -260,6 +263,8 @@ bool same_state(const UiState &lhs, const UiState &rhs) {
          lhs.hx711_zeroed_ms == rhs.hx711_zeroed_ms &&
          lhs.last_button == rhs.last_button &&
          lhs.last_button_ms == rhs.last_button_ms &&
+         std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0 &&
+         lhs.status_until_ms == rhs.status_until_ms &&
          std::memcmp(lhs.rfid_uid, rhs.rfid_uid, sizeof(lhs.rfid_uid)) == 0;
 }
 
@@ -532,6 +537,7 @@ void render_state(const UiState &state) {
 
   snapshot.scale.current_weight_g = state.spool.current_weight_g;
   snapshot.scale.reference_full_weight_g = state.spool.reference_full_weight_g;
+  std::memcpy(snapshot.scale.status_message, state.status_message, sizeof(snapshot.scale.status_message));
 
   display::render(snapshot);
 }
@@ -899,7 +905,18 @@ void App::handle_scale_input(AppState &state, const ButtonEvent &event) {
   }
 
   if (event.kind == ButtonKind::kA) {
-    state.active_screen = previous_screen(state.active_screen);
+    Hx711Command command{};
+    command.kind = Hx711Command::Kind::kZero;
+    command.timestamp_ms = event.timestamp_ms;
+    if (publish_hx711_command(command)) {
+      std::snprintf(state.status_message, sizeof(state.status_message), "TARA OK");
+      state.status_until_ms = event.timestamp_ms + kScaleStatusDurationMs;
+    }
+  } else if (event.kind == ButtonKind::kB) {
+    state.spool.reference_full_weight_g = state.spool.current_weight_g;
+    update_spool_metrics_for_state(state);
+    std::snprintf(state.status_message, sizeof(state.status_message), "REFERENCE SAVED");
+    state.status_until_ms = event.timestamp_ms + kScaleStatusDurationMs;
   } else if (event.kind == ButtonKind::kC) {
     state.active_screen = next_screen(state.active_screen);
   }
@@ -954,6 +971,11 @@ void App::app_task_loop() {
     const AppState before_timeout_state = state;
     if (fsm_.handle_timeouts(state, now)) {
       log_timeout_effects(before_timeout_state, state, now);
+      handled_event = true;
+    }
+    if (state.status_message[0] != '\0' && now >= state.status_until_ms) {
+      state.status_message[0] = '\0';
+      state.status_until_ms = 0;
       handled_event = true;
     }
 
