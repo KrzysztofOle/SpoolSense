@@ -32,6 +32,29 @@ bool Pn532Reader::read_sonicare_usage_page(uint8_t *page_data) {
   return pn532_.ntag2xx_ReadPage(kSonicareUsagePage, page_data);
 }
 
+bool Pn532Reader::read_ntag_page(uint8_t page, uint8_t *page_data) {
+  if (page_data == nullptr) {
+    return false;
+  }
+
+  board::I2cLock lock;
+  return pn532_.ntag2xx_ReadPage(page, page_data);
+}
+
+bool Pn532Reader::write_ntag_page(uint8_t page, const uint8_t *data) {
+  if (data == nullptr) {
+    return false;
+  }
+
+  uint8_t page_data[4] = {};
+  for (size_t i = 0; i < sizeof(page_data); ++i) {
+    page_data[i] = data[i];
+  }
+
+  board::I2cLock lock;
+  return pn532_.ntag2xx_WritePage(page, page_data);
+}
+
 bool Pn532Reader::begin() {
   firmware_version_ = 0;
 

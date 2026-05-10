@@ -21,6 +21,7 @@
 
 #include <sdkconfig.h>
 #include <nvs_flash.h>
+#include <esp_system.h>
 
 #include "board/buttons.hpp"
 #include "board/board.hpp"
@@ -99,6 +100,125 @@ constexpr float kHx711CountsPerGram = 1000.0f;
 constexpr uint32_t kDiagnosticsIntervalMs = 5000;
 constexpr uint32_t kAppStartupTimeoutMs = 5000;
 constexpr uint32_t kScaleStatusDurationMs = 1000;
+constexpr uint32_t kRfidStatusDurationMs = 1200;
+constexpr uint8_t kRfidSampleStartPage = 8;
+constexpr uint8_t kRfidSamplePageCount = 3;
+
+struct RandomSpoolProfile {
+  uint8_t material_code = 0;
+  uint8_t color_code = 0;
+  int16_t reference_weight_g = 0;
+  uint8_t diameter_x10 = 0;
+  uint8_t nozzle_temp_c = 0;
+  uint8_t bed_temp_c = 0;
+};
+
+struct DecodedSpoolProfile {
+  bool valid = false;
+  uint8_t material_code = 0;
+  uint8_t color_code = 0;
+  int16_t reference_weight_g = 0;
+  uint8_t diameter_x10 = 0;
+  uint8_t nozzle_temp_c = 0;
+  uint8_t bed_temp_c = 0;
+};
+
+const char *material_name(uint8_t code) {
+  static constexpr const char *kMaterials[] = {"PLA", "PETG", "ABS", "ASA", "TPU", "NYLON"};
+  if (code >= (sizeof(kMaterials) / sizeof(kMaterials[0]))) {
+    return "PLA";
+  }
+  return kMaterials[code];
+}
+
+const char *color_name(uint8_t code) {
+  static constexpr const char *kColors[] = {"Black", "White", "Gray", "Red",
+                                            "Blue", "Green", "Orange", "Natural"};
+  if (code >= (sizeof(kColors) / sizeof(kColors[0]))) {
+    return "Black";
+  }
+  return kColors[code];
+}
+
+RandomSpoolProfile make_random_spool_profile(int32_t current_weight_g) {
+  static constexpr int16_t kReferenceWeights[] = {850, 1000, 1200, 1500};
+  static constexpr uint8_t kNozzleTemps[] = {200, 205, 210, 220, 235, 245};
+  static constexpr uint8_t kBedTemps[] = {55, 60, 65, 70, 80, 90};
+  static constexpr uint8_t kDiameterX10[] = {17, 28};
+
+  RandomSpoolProfile profile{};
+  profile.material_code = static_cast<uint8_t>(esp_random() % 6U);  // PLA/PETG/ABS/ASA/TPU/NYLON
+  profile.color_code = static_cast<uint8_t>(esp_random() % 8U);     // 8 popular colors
+  const int32_t clamped_current = current_weight_g < 0 ? 0 : current_weight_g;
+  const int16_t fallback_ref =
+      kReferenceWeights[esp_random() % (sizeof(kReferenceWeights) / sizeof(kReferenceWeights[0]))];
+  if (clamped_current > 0) {
+    const int32_t used_delta = 120 + static_cast<int32_t>(esp_random() % 380U);  // 120..499 g used
+    int32_t derived_ref = clamped_current + used_delta;
+    if (derived_ref > 2500) {
+      derived_ref = 2500;
+    }
+    profile.reference_weight_g = static_cast<int16_t>(derived_ref);
+  } else {
+    profile.reference_weight_g = fallback_ref;
+  }
+  profile.diameter_x10 = kDiameterX10[esp_random() % (sizeof(kDiameterX10) / sizeof(kDiameterX10[0]))];
+  profile.nozzle_temp_c =
+      kNozzleTemps[esp_random() % (sizeof(kNozzleTemps) / sizeof(kNozzleTemps[0]))];
+  profile.bed_temp_c = kBedTemps[esp_random() % (sizeof(kBedTemps) / sizeof(kBedTemps[0]))];
+  return profile;
+}
+
+void encode_random_profile_payload(const RandomSpoolProfile &profile, uint8_t *buffer, size_t size) {
+  if (buffer == nullptr || size < 12U) {
+    return;
+  }
+
+  std::memset(buffer, 0, size);
+  buffer[0] = 'S';
+  buffer[1] = 'S';
+  buffer[2] = 0x01;  // payload version
+  buffer[3] = profile.material_code;
+  buffer[4] = profile.color_code;
+  buffer[5] = static_cast<uint8_t>(profile.reference_weight_g & 0xFF);
+  buffer[6] = static_cast<uint8_t>((profile.reference_weight_g >> 8) & 0xFF);
+  buffer[7] = profile.diameter_x10;
+  buffer[8] = profile.nozzle_temp_c;
+  buffer[9] = profile.bed_temp_c;
+  buffer[10] = static_cast<uint8_t>(esp_random() & 0xFFU);  // sample batch id
+  uint8_t checksum = 0;
+  for (size_t i = 0; i < 11U; ++i) {
+    checksum ^= buffer[i];
+  }
+  buffer[11] = checksum;
+}
+
+DecodedSpoolProfile decode_profile_payload(const uint8_t *buffer, size_t size) {
+  DecodedSpoolProfile profile{};
+  if (buffer == nullptr || size < 12U) {
+    return profile;
+  }
+  if (buffer[0] != 'S' || buffer[1] != 'S' || buffer[2] != 0x01) {
+    return profile;
+  }
+
+  uint8_t checksum = 0;
+  for (size_t i = 0; i < 11U; ++i) {
+    checksum ^= buffer[i];
+  }
+  if (checksum != buffer[11]) {
+    return profile;
+  }
+
+  profile.valid = true;
+  profile.material_code = buffer[3];
+  profile.color_code = buffer[4];
+  profile.reference_weight_g = static_cast<int16_t>((static_cast<uint16_t>(buffer[6]) << 8) | buffer[5]);
+  profile.diameter_x10 = buffer[7];
+  profile.nozzle_temp_c = buffer[8];
+  profile.bed_temp_c = buffer[9];
+  return profile;
+}
 bool same_uid(const uint8_t *lhs, const uint8_t *rhs, uint8_t uid_length) {
   if (uid_length == 0) {
     return false;
@@ -453,6 +573,10 @@ void log_rfid_event_effects(const AppState &before_state, const AppState &after_
         diagnostics::log_line("Sensor fault");
       }
       break;
+
+    case RfidEvent::Kind::kWriteResult:
+      diagnostics::log_line(event.write_success ? "RFID: write success" : "RFID: write failed");
+      break;
   }
 
   log_mode_if_changed(before_state.current_mode, after_state.current_mode);
@@ -552,6 +676,7 @@ void render_state(const UiState &state) {
   std::memcpy(snapshot.rfid.material, state.spool.material, sizeof(snapshot.rfid.material));
   std::memcpy(snapshot.rfid.color, state.spool.color, sizeof(snapshot.rfid.color));
   snapshot.rfid.reference_full_weight_g = state.spool.reference_full_weight_g;
+  std::memcpy(snapshot.rfid.status_message, state.status_message, sizeof(snapshot.rfid.status_message));
 
   display::render(snapshot);
 }
@@ -582,14 +707,15 @@ void App::restart() {
 void App::start_tasks() {
   stop_tasks();
 
-  if (hardware_.rfid_present) {
-    if (rfid_event_queue_ == nullptr) {
-      rfid_event_queue_ = xQueueCreate(kRfidEventQueueLength, sizeof(RfidEvent));
-    } else {
-      xQueueReset(rfid_event_queue_);
-    }
-  } else if (rfid_event_queue_ != nullptr) {
+  if (rfid_event_queue_ == nullptr) {
+    rfid_event_queue_ = xQueueCreate(kRfidEventQueueLength, sizeof(RfidEvent));
+  } else {
     xQueueReset(rfid_event_queue_);
+  }
+  if (rfid_command_queue_ == nullptr) {
+    rfid_command_queue_ = xQueueCreate(kRfidCommandQueueLength, sizeof(RfidCommand));
+  } else {
+    xQueueReset(rfid_command_queue_);
   }
 
 #if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
@@ -626,8 +752,13 @@ void App::start_tasks() {
     return;
   }
 
-  if (hardware_.rfid_present && rfid_event_queue_ == nullptr) {
+  if (rfid_event_queue_ == nullptr) {
     diagnostics::log_line("RFID queue allocation failed");
+    stop_tasks();
+    return;
+  }
+  if (rfid_command_queue_ == nullptr) {
+    diagnostics::log_line("RFID command queue allocation failed");
     stop_tasks();
     return;
   }
@@ -656,15 +787,11 @@ void App::start_tasks() {
     return;
   }
 
-  if (hardware_.rfid_present) {
-    result = xTaskCreate(rfid_task_entry, "rfid_task", 6144, this, 3, &rfid_task_handle_);
-    if (result != pdPASS) {
-      diagnostics::log_line("RFID task start failed");
-      stop_tasks();
-      return;
-    }
-  } else {
-    diagnostics::log_line("RFID missing");
+  result = xTaskCreate(rfid_task_entry, "rfid_task", 6144, this, 3, &rfid_task_handle_);
+  if (result != pdPASS) {
+    diagnostics::log_line("RFID task start failed");
+    stop_tasks();
+    return;
   }
 
 #if defined(CONFIG_SPOOLSENSE_ENABLE_HX711) && CONFIG_SPOOLSENSE_ENABLE_HX711
@@ -728,6 +855,9 @@ void App::stop_tasks() {
 
   if (hx711_command_queue_ != nullptr) {
     xQueueReset(hx711_command_queue_);
+  }
+  if (rfid_command_queue_ != nullptr) {
+    xQueueReset(rfid_command_queue_);
   }
 }
 
@@ -821,12 +951,28 @@ bool App::publish_hx711_command(const Hx711Command &command) {
   return xQueueSendToBack(hx711_command_queue_, &command, 0) == pdTRUE;
 }
 
+bool App::publish_rfid_command(const RfidCommand &command) {
+  if (rfid_command_queue_ == nullptr) {
+    return false;
+  }
+
+  return xQueueSendToBack(rfid_command_queue_, &command, 0) == pdTRUE;
+}
+
 bool App::receive_rfid_event(RfidEvent *event) {
   if (event == nullptr || rfid_event_queue_ == nullptr) {
     return false;
   }
 
   return xQueueReceive(rfid_event_queue_, event, 0) == pdTRUE;
+}
+
+bool App::receive_rfid_command(RfidCommand *command) {
+  if (command == nullptr || rfid_command_queue_ == nullptr) {
+    return false;
+  }
+
+  return xQueueReceive(rfid_command_queue_, command, 0) == pdTRUE;
 }
 
 bool App::receive_weight_event(WeightEvent *event) {
@@ -876,7 +1022,7 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
         handle_scale_input(state, event);
         break;
       case UiScreen::kRfid:
-        handle_home_input(state, event);
+        handle_rfid_input(state, event);
         break;
 
       default:
@@ -893,7 +1039,7 @@ void App::handle_button_input(AppState &state, bool &handled_event) {
 }
 
 void App::handle_home_input(AppState &state, const ButtonEvent &event) {
-  if (event.action != ButtonAction::kClick) {
+  if (event.action != ButtonAction::kClick && event.action != ButtonAction::kLongPress) {
     return;
   }
 
@@ -905,7 +1051,7 @@ void App::handle_home_input(AppState &state, const ButtonEvent &event) {
 }
 
 void App::handle_diagnostics_input(AppState &state, const ButtonEvent &event) {
-  if (event.action != ButtonAction::kClick) {
+  if (event.action != ButtonAction::kClick && event.action != ButtonAction::kLongPress) {
     return;
   }
 
@@ -917,11 +1063,14 @@ void App::handle_diagnostics_input(AppState &state, const ButtonEvent &event) {
 }
 
 void App::handle_scale_input(AppState &state, const ButtonEvent &event) {
-  if (event.action != ButtonAction::kClick) {
+  if (event.action != ButtonAction::kClick && event.action != ButtonAction::kLongPress) {
     return;
   }
 
   if (event.kind == ButtonKind::kA) {
+    if (event.action != ButtonAction::kClick) {
+      return;
+    }
     Hx711Command command{};
     command.kind = Hx711Command::Kind::kZero;
     command.timestamp_ms = event.timestamp_ms;
@@ -930,12 +1079,76 @@ void App::handle_scale_input(AppState &state, const ButtonEvent &event) {
       state.status_until_ms = event.timestamp_ms + kScaleStatusDurationMs;
     }
   } else if (event.kind == ButtonKind::kB) {
+    if (event.action != ButtonAction::kClick) {
+      return;
+    }
     state.spool.reference_full_weight_g = state.spool.current_weight_g;
     update_spool_metrics_for_state(state);
     std::snprintf(state.status_message, sizeof(state.status_message), "REFERENCE SAVED");
     state.status_until_ms = event.timestamp_ms + kScaleStatusDurationMs;
   } else if (event.kind == ButtonKind::kC) {
     state.active_screen = next_screen(state.active_screen);
+  }
+}
+
+void App::handle_rfid_input(AppState &state, const ButtonEvent &event) {
+  char dbg_line[96] = {};
+  std::snprintf(dbg_line, sizeof(dbg_line), "RFID input kind=%u action=%u uid=%u",
+                static_cast<unsigned>(event.kind), static_cast<unsigned>(event.action),
+                static_cast<unsigned>(state.rfid_has_uid));
+  diagnostics::log_line(dbg_line);
+
+  if (event.action != ButtonAction::kClick && event.action != ButtonAction::kLongPress) {
+    diagnostics::log_line("RFID save ignored: action");
+    return;
+  }
+
+  if (event.kind == ButtonKind::kA) {
+    state.active_screen = previous_screen(state.active_screen);
+    return;
+  }
+  if (event.kind == ButtonKind::kC) {
+    state.active_screen = next_screen(state.active_screen);
+    return;
+  }
+  if (event.kind != ButtonKind::kB) {
+    diagnostics::log_line("RFID save ignored: not B");
+    return;
+  }
+  if (event.action != ButtonAction::kClick) {
+    diagnostics::log_line("RFID save ignored: long press");
+    return;
+  }
+  if (!state.rfid_has_uid) {
+    diagnostics::log_line("RFID save skipped: no card");
+    std::snprintf(state.status_message, sizeof(state.status_message), "NO CARD");
+    state.status_until_ms = event.timestamp_ms + kRfidStatusDurationMs;
+    return;
+  }
+
+  RfidCommand command{};
+  command.kind = RfidCommand::Kind::kWriteSampleData;
+  command.start_page = kRfidSampleStartPage;
+  command.page_count = kRfidSamplePageCount;
+  command.timestamp_ms = event.timestamp_ms;
+  const RandomSpoolProfile profile = make_random_spool_profile(state.spool.current_weight_g);
+  encode_random_profile_payload(profile, command.data, sizeof(command.data));
+
+  char profile_line[96] = {};
+  std::snprintf(profile_line, sizeof(profile_line), "RFID random profile m=%u c=%u ref=%d d=%u n=%u b=%u",
+                static_cast<unsigned>(profile.material_code), static_cast<unsigned>(profile.color_code),
+                static_cast<int>(profile.reference_weight_g), static_cast<unsigned>(profile.diameter_x10),
+                static_cast<unsigned>(profile.nozzle_temp_c), static_cast<unsigned>(profile.bed_temp_c));
+  diagnostics::log_line(profile_line);
+
+  if (publish_rfid_command(command)) {
+    std::snprintf(state.status_message, sizeof(state.status_message), "SAVE...");
+    state.status_until_ms = event.timestamp_ms + kRfidStatusDurationMs;
+    diagnostics::log_line("RFID save queued");
+  } else {
+    diagnostics::log_line("RFID save queue full");
+    std::snprintf(state.status_message, sizeof(state.status_message), "SAVE BUSY");
+    state.status_until_ms = event.timestamp_ms + kRfidStatusDurationMs;
   }
 }
 
@@ -970,8 +1183,35 @@ void App::app_task_loop() {
 
     RfidEvent rfid_event{};
     while (receive_rfid_event(&rfid_event)) {
+      if (rfid_event.kind == RfidEvent::Kind::kWriteResult) {
+        std::snprintf(state.status_message, sizeof(state.status_message),
+                      rfid_event.write_success ? "TAG SAVED" : "SAVE FAILED");
+        state.status_until_ms = rfid_event.timestamp_ms + kRfidStatusDurationMs;
+        handled_event = true;
+        continue;
+      }
+
+      if (rfid_event.kind == RfidEvent::Kind::kReaderMissing) {
+        state.hardware.rfid_present = false;
+      } else if (rfid_event.kind == RfidEvent::Kind::kReaderReady ||
+                 rfid_event.kind == RfidEvent::Kind::kWaitingForCard ||
+                 rfid_event.kind == RfidEvent::Kind::kCardPresent ||
+                 rfid_event.kind == RfidEvent::Kind::kCardRemoved) {
+        state.hardware.rfid_present = true;
+      }
+
       const AppState before_state = state;
       fsm_.handle_event(state, rfid_event);
+      if (rfid_event.kind == RfidEvent::Kind::kCardPresent && rfid_event.profile_available) {
+        std::snprintf(state.spool.material, sizeof(state.spool.material), "%s",
+                      material_name(rfid_event.profile_material_code));
+        std::snprintf(state.spool.color, sizeof(state.spool.color), "%s",
+                      color_name(rfid_event.profile_color_code));
+        state.spool.reference_full_weight_g = rfid_event.profile_reference_weight_g;
+        state.spool.diameter_mm = static_cast<float>(rfid_event.profile_diameter_x10) / 10.0f;
+        state.spool.nozzle_temp_c = static_cast<int16_t>(rfid_event.profile_nozzle_temp_c);
+        state.spool.bed_temp_c = static_cast<int16_t>(rfid_event.profile_bed_temp_c);
+      }
       log_rfid_event_effects(before_state, state, rfid_event);
       handled_event = true;
     }
@@ -1059,6 +1299,48 @@ void App::rfid_task_loop() {
       continue;
     }
 
+    RfidCommand command{};
+    while (receive_rfid_command(&command)) {
+      char cmd_line[96] = {};
+      std::snprintf(cmd_line, sizeof(cmd_line), "RFID cmd kind=%u start=%u pages=%u has_uid=%u",
+                    static_cast<unsigned>(command.kind), static_cast<unsigned>(command.start_page),
+                    static_cast<unsigned>(command.page_count), static_cast<unsigned>(has_last_uid));
+      diagnostics::log_line(cmd_line);
+
+      if (command.kind != RfidCommand::Kind::kWriteSampleData) {
+        diagnostics::log_line("RFID cmd ignored: unknown");
+        continue;
+      }
+      if (!has_last_uid) {
+        diagnostics::log_line("RFID save skipped: no active card");
+        continue;
+      }
+
+      bool write_ok = true;
+      for (uint8_t page_offset = 0; page_offset < command.page_count; ++page_offset) {
+        const uint8_t page = static_cast<uint8_t>(command.start_page + page_offset);
+        const uint8_t *page_data = &command.data[page_offset * 4];
+        const bool page_ok = reader.write_ntag_page(page, page_data);
+        char page_line[96] = {};
+        std::snprintf(page_line, sizeof(page_line), "RFID write page=%u result=%s",
+                      static_cast<unsigned>(page), page_ok ? "ok" : "fail");
+        diagnostics::log_line(page_line);
+        if (!page_ok) {
+          write_ok = false;
+          break;
+        }
+      }
+
+      diagnostics::log_line(write_ok ? "RFID sample data written" : "RFID sample write failed");
+      RfidEvent write_event{};
+      write_event.kind = RfidEvent::Kind::kWriteResult;
+      write_event.write_success = write_ok;
+      write_event.timestamp_ms = millis();
+      if (!publish_rfid_event(write_event)) {
+        diagnostics::log_line("RFID write result dropped");
+      }
+    }
+
     if (has_last_uid && (now - last_card_seen_at_ms >= kRfidCardGoneTimeoutMs)) {
       has_last_uid = false;
       last_uid_length = 0;
@@ -1130,6 +1412,29 @@ void App::rfid_task_loop() {
       event.usage_available = false;
       event.page_read_failed = true;
       std::memset(event.usage_page, 0, sizeof(event.usage_page));
+    }
+
+    uint8_t profile_payload[12] = {};
+    bool profile_read_ok = true;
+    for (uint8_t i = 0; i < kRfidSamplePageCount; ++i) {
+      uint8_t page_data[4] = {};
+      if (!reader.read_ntag_page(static_cast<uint8_t>(kRfidSampleStartPage + i), page_data)) {
+        profile_read_ok = false;
+        break;
+      }
+      std::memcpy(&profile_payload[i * 4], page_data, sizeof(page_data));
+    }
+    if (profile_read_ok) {
+      const DecodedSpoolProfile profile = decode_profile_payload(profile_payload, sizeof(profile_payload));
+      if (profile.valid) {
+        event.profile_available = true;
+        event.profile_material_code = profile.material_code;
+        event.profile_color_code = profile.color_code;
+        event.profile_reference_weight_g = profile.reference_weight_g;
+        event.profile_diameter_x10 = profile.diameter_x10;
+        event.profile_nozzle_temp_c = profile.nozzle_temp_c;
+        event.profile_bed_temp_c = profile.bed_temp_c;
+      }
     }
 
     if (!publish_rfid_event(event)) {

@@ -162,6 +162,9 @@ bool AppFsm::handle_event(AppState &state, const RfidEvent &event) const {
       }
       sync_mode(state);
       return true;
+
+    case RfidEvent::Kind::kWriteResult:
+      return false;
   }
 
   return false;

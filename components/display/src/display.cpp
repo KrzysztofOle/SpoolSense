@@ -52,6 +52,12 @@ constexpr gpio_num_t k_lcd_pin_backlight = GPIO_NUM_32;
 constexpr spi_host_device_t k_lcd_host = SPI2_HOST;
 
 constexpr lv_coord_t k_line_x = 12;
+constexpr lv_coord_t k_title_bar_x = 0;
+constexpr lv_coord_t k_title_bar_y = 0;
+constexpr lv_coord_t k_title_bar_h = 34;
+constexpr lv_coord_t k_footer_y = 206;
+constexpr lv_coord_t k_footer_h = 30;
+constexpr lv_coord_t k_footer_gap = 8;
 constexpr lv_coord_t k_regular_line_y[] = {10, 44, 78, 112};
 constexpr lv_coord_t k_diagnostic_line_y[] = {10, 56, 102, 148};
 constexpr lv_coord_t k_home_title_y = 8;
@@ -60,20 +66,17 @@ constexpr lv_coord_t k_home_line_2_y = 68;
 constexpr lv_coord_t k_home_line_3_y = 98;
 constexpr lv_coord_t k_home_line_4_y = 128;
 constexpr lv_coord_t k_home_bar_x = 12;
-constexpr lv_coord_t k_home_bar_y = 170;
+constexpr lv_coord_t k_home_bar_y = 150;
 constexpr lv_coord_t k_home_bar_w = 296;
 constexpr lv_coord_t k_home_bar_h = 24;
-constexpr lv_coord_t k_home_bar_text_y = 200;
-constexpr lv_coord_t k_diag_title_y = 8;
+constexpr lv_coord_t k_home_bar_text_y = 178;
 constexpr lv_coord_t k_diag_line_1_y = 46;
 constexpr lv_coord_t k_diag_line_2_y = 82;
 constexpr lv_coord_t k_diag_line_3_y = 118;
 constexpr lv_coord_t k_diag_line_4_y = 154;
-constexpr lv_coord_t k_scale_title_y = 8;
 constexpr lv_coord_t k_scale_line_1_y = 56;
 constexpr lv_coord_t k_scale_line_2_y = 96;
 constexpr lv_coord_t k_scale_line_3_y = 160;
-constexpr lv_coord_t k_rfid_title_y = 8;
 constexpr lv_coord_t k_rfid_line_1_y = 50;
 constexpr lv_coord_t k_rfid_line_2_y = 84;
 constexpr lv_coord_t k_rfid_line_3_y = 118;
@@ -534,15 +537,18 @@ class NativeDisplay {
   }
 
   void build_home_screen(lv_obj_t *scr) {
-    home_title_label_ = lv_label_create(scr);
-    lv_obj_set_style_text_color(home_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_text_font(home_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
-    lv_obj_set_pos(home_title_label_, k_line_x, k_home_title_y);
+    home_title_bar_ = lv_obj_create(scr);
+    configure_title_bar(home_title_bar_);
+    home_title_label_ = lv_label_create(home_title_bar_);
+    configure_title_label(home_title_label_);
+    lv_obj_set_style_text_font(home_title_label_, &lv_font_montserrat_22, LV_PART_MAIN);
 
     for (size_t index = 0; index < home_info_labels_.size(); ++index) {
       home_info_labels_[index] = lv_label_create(scr);
       lv_obj_set_style_text_color(home_info_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-      lv_obj_set_style_text_font(home_info_labels_[index], &lv_font_montserrat_14, LV_PART_MAIN);
+      lv_obj_set_style_text_font(home_info_labels_[index],
+                                 index < 3 ? &lv_font_montserrat_20 : &lv_font_montserrat_14,
+                                 LV_PART_MAIN);
       lv_obj_set_style_text_align(home_info_labels_[index], LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
       lv_obj_set_width(home_info_labels_[index], NativeLcd::kWidth - 24);
       lv_obj_set_pos(home_info_labels_[index], k_line_x,
@@ -570,6 +576,8 @@ class NativeDisplay {
     lv_obj_set_style_text_color(home_remain_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_text_font(home_remain_label_, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_obj_set_pos(home_remain_label_, k_line_x, k_home_bar_text_y);
+
+    build_footer(scr);
   }
 
   void refresh_home(const HomeSnapshot &snapshot) {
@@ -587,17 +595,16 @@ class NativeDisplay {
                   snapshot.color[0] == '\0' ? "-" : snapshot.color);
     lv_label_set_text(home_info_labels_[0], line1);
 
-    char line2[64] = {};
-    std::snprintf(line2, sizeof(line2), "Weight: %ld g", static_cast<long>(snapshot.current_weight_g));
+    char line2[96] = {};
+    std::snprintf(line2, sizeof(line2), "W:%ldg  R:%ldg  U:%ldg",
+                  static_cast<long>(snapshot.current_weight_g),
+                  static_cast<long>(snapshot.reference_full_weight_g),
+                  static_cast<long>(snapshot.used_weight_g));
     lv_label_set_text(home_info_labels_[1], line2);
 
-    char line3[64] = {};
-    std::snprintf(line3, sizeof(line3), "Ref: %ld g", static_cast<long>(snapshot.reference_full_weight_g));
-    lv_label_set_text(home_info_labels_[2], line3);
+    lv_label_set_text(home_info_labels_[2], "");
 
-    char line4[64] = {};
-    std::snprintf(line4, sizeof(line4), "Used: %ld g", static_cast<long>(snapshot.used_weight_g));
-    lv_label_set_text(home_info_labels_[3], line4);
+    lv_label_set_text(home_info_labels_[3], "");
 
     uint8_t percent = snapshot.remaining_percent;
     if (percent > 100U) {
@@ -610,6 +617,7 @@ class NativeDisplay {
     char remain_line[48] = {};
     std::snprintf(remain_line, sizeof(remain_line), "Remain: %u%%", static_cast<unsigned>(percent));
     lv_label_set_text(home_remain_label_, remain_line);
+    refresh_footer("PREV", "-", "NEXT");
 
     lv_timer_handler();
     lv_refr_now(nullptr);
@@ -617,10 +625,11 @@ class NativeDisplay {
   }
 
   void build_diagnostics_screen(lv_obj_t *scr) {
-    diagnostics_title_label_ = lv_label_create(scr);
-    lv_obj_set_style_text_color(diagnostics_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    diagnostics_title_bar_ = lv_obj_create(scr);
+    configure_title_bar(diagnostics_title_bar_);
+    diagnostics_title_label_ = lv_label_create(diagnostics_title_bar_);
+    configure_title_label(diagnostics_title_label_);
     lv_obj_set_style_text_font(diagnostics_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
-    lv_obj_set_pos(diagnostics_title_label_, k_line_x, k_diag_title_y);
 
     for (size_t index = 0; index < diagnostics_labels_.size(); ++index) {
       diagnostics_labels_[index] = lv_label_create(scr);
@@ -634,6 +643,8 @@ class NativeDisplay {
                                         : k_diag_line_4_y;
       lv_obj_set_pos(diagnostics_labels_[index], k_line_x, y);
     }
+
+    build_footer(scr);
   }
 
   void refresh_diagnostics(const DiagnosticsSnapshot &snapshot) {
@@ -651,6 +662,7 @@ class NativeDisplay {
     lv_label_set_text(diagnostics_labels_[2], line);
     std::snprintf(line, sizeof(line), "I2C       %s", health_text(snapshot.i2c));
     lv_label_set_text(diagnostics_labels_[3], line);
+    refresh_footer("PREV", "-", "NEXT");
 
     lv_timer_handler();
     lv_refr_now(nullptr);
@@ -658,10 +670,11 @@ class NativeDisplay {
   }
 
   void build_scale_screen(lv_obj_t *scr) {
-    scale_title_label_ = lv_label_create(scr);
-    lv_obj_set_style_text_color(scale_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    scale_title_bar_ = lv_obj_create(scr);
+    configure_title_bar(scale_title_bar_);
+    scale_title_label_ = lv_label_create(scale_title_bar_);
+    configure_title_label(scale_title_label_);
     lv_obj_set_style_text_font(scale_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
-    lv_obj_set_pos(scale_title_label_, k_line_x, k_scale_title_y);
 
     for (size_t index = 0; index < scale_labels_.size(); ++index) {
       scale_labels_[index] = lv_label_create(scr);
@@ -672,6 +685,8 @@ class NativeDisplay {
       const lv_coord_t y = index == 0 ? k_scale_line_1_y : (index == 1 ? k_scale_line_2_y : k_scale_line_3_y);
       lv_obj_set_pos(scale_labels_[index], k_line_x, y);
     }
+
+    build_footer(scr);
   }
 
   void refresh_scale(const ScaleSnapshot &snapshot) {
@@ -688,8 +703,9 @@ class NativeDisplay {
     if (snapshot.status_message[0] != '\0') {
       lv_label_set_text(scale_labels_[2], snapshot.status_message);
     } else {
-      lv_label_set_text(scale_labels_[2], "A: Tara  B: Save Ref");
+      lv_label_set_text(scale_labels_[2], "");
     }
+    refresh_footer("TARA", "SAVE REF", "NEXT");
 
     lv_timer_handler();
     lv_refr_now(nullptr);
@@ -697,10 +713,11 @@ class NativeDisplay {
   }
 
   void build_rfid_screen(lv_obj_t *scr) {
-    rfid_title_label_ = lv_label_create(scr);
-    lv_obj_set_style_text_color(rfid_title_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    rfid_title_bar_ = lv_obj_create(scr);
+    configure_title_bar(rfid_title_bar_);
+    rfid_title_label_ = lv_label_create(rfid_title_bar_);
+    configure_title_label(rfid_title_label_);
     lv_obj_set_style_text_font(rfid_title_label_, &lv_font_montserrat_20, LV_PART_MAIN);
-    lv_obj_set_pos(rfid_title_label_, k_line_x, k_rfid_title_y);
 
     for (size_t index = 0; index < rfid_labels_.size(); ++index) {
       rfid_labels_[index] = lv_label_create(scr);
@@ -714,6 +731,8 @@ class NativeDisplay {
                                         : k_rfid_line_4_y;
       lv_obj_set_pos(rfid_labels_[index], k_line_x, y);
     }
+
+    build_footer(scr);
   }
 
   void refresh_rfid(const RfidSnapshot &snapshot) {
@@ -733,11 +752,16 @@ class NativeDisplay {
       lv_label_set_text(rfid_labels_[0], line);
       std::snprintf(line, sizeof(line), "Material: %s", snapshot.material[0] == '\0' ? "-" : snapshot.material);
       lv_label_set_text(rfid_labels_[1], line);
-      std::snprintf(line, sizeof(line), "Color: %s", snapshot.color[0] == '\0' ? "-" : snapshot.color);
+      if (snapshot.status_message[0] != '\0') {
+        std::snprintf(line, sizeof(line), "%s", snapshot.status_message);
+      } else {
+        std::snprintf(line, sizeof(line), "Color: %s", snapshot.color[0] == '\0' ? "-" : snapshot.color);
+      }
       lv_label_set_text(rfid_labels_[2], line);
       std::snprintf(line, sizeof(line), "Ref: %ld g", static_cast<long>(snapshot.reference_full_weight_g));
       lv_label_set_text(rfid_labels_[3], line);
     }
+    refresh_footer("PREV", "SAVE TAG", "NEXT");
 
     lv_timer_handler();
     lv_refr_now(nullptr);
@@ -787,7 +811,8 @@ class NativeDisplay {
            std::memcmp(lhs.uid, rhs.uid, sizeof(lhs.uid)) == 0 &&
            std::memcmp(lhs.material, rhs.material, sizeof(lhs.material)) == 0 &&
            std::memcmp(lhs.color, rhs.color, sizeof(lhs.color)) == 0 &&
-           lhs.reference_full_weight_g == rhs.reference_full_weight_g;
+           lhs.reference_full_weight_g == rhs.reference_full_weight_g &&
+           std::memcmp(lhs.status_message, rhs.status_message, sizeof(lhs.status_message)) == 0;
   }
 
   static bool is_same_ui_snapshot(const UiSnapshot &lhs, const UiSnapshot &rhs) {
@@ -807,6 +832,51 @@ class NativeDisplay {
       default:
         return false;
     }
+  }
+
+  void configure_title_bar(lv_obj_t *bar) {
+    lv_obj_remove_style_all(bar);
+    lv_obj_set_pos(bar, k_title_bar_x, k_title_bar_y);
+    lv_obj_set_size(bar, NativeLcd::kWidth, k_title_bar_h);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(0x1E2A36), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(bar, lv_color_hex(0x2F4254), LV_PART_MAIN);
+    lv_obj_set_style_border_width(bar, 1, LV_PART_MAIN);
+  }
+
+  void configure_title_label(lv_obj_t *label) {
+    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_width(label, NativeLcd::kWidth);
+    lv_obj_set_pos(label, 0, k_home_title_y);
+  }
+
+  void build_footer(lv_obj_t *scr) {
+    const lv_coord_t total_gap = 2 * k_footer_gap;
+    const lv_coord_t box_w = (NativeLcd::kWidth - 2 * k_line_x - total_gap) / 3;
+
+    for (size_t index = 0; index < footer_boxes_.size(); ++index) {
+      footer_boxes_[index] = lv_obj_create(scr);
+      lv_obj_remove_style_all(footer_boxes_[index]);
+      lv_obj_set_size(footer_boxes_[index], box_w, k_footer_h);
+      lv_obj_set_pos(footer_boxes_[index], k_line_x + static_cast<lv_coord_t>(index) * (box_w + k_footer_gap),
+                     k_footer_y);
+      lv_obj_set_style_bg_color(footer_boxes_[index], lv_color_hex(0x243344), LV_PART_MAIN);
+      lv_obj_set_style_bg_opa(footer_boxes_[index], LV_OPA_COVER, LV_PART_MAIN);
+      lv_obj_set_style_border_color(footer_boxes_[index], lv_color_hex(0x4F6B86), LV_PART_MAIN);
+      lv_obj_set_style_border_width(footer_boxes_[index], 1, LV_PART_MAIN);
+
+      footer_labels_[index] = lv_label_create(footer_boxes_[index]);
+      lv_obj_set_style_text_color(footer_labels_[index], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+      lv_obj_set_style_text_font(footer_labels_[index], &lv_font_montserrat_14, LV_PART_MAIN);
+      lv_obj_center(footer_labels_[index]);
+    }
+  }
+
+  void refresh_footer(const char *label_a, const char *label_b, const char *label_c) {
+    lv_label_set_text(footer_labels_[0], label_a != nullptr ? label_a : "");
+    lv_label_set_text(footer_labels_[1], label_b != nullptr ? label_b : "");
+    lv_label_set_text(footer_labels_[2], label_c != nullptr ? label_c : "");
   }
 
   void sync_time() {
@@ -832,17 +902,23 @@ class NativeDisplay {
   bool has_ui_snapshot_ = false;
   ScreenStyle screen_style_ = ScreenStyle::kRegular;
   UiSnapshot last_ui_snapshot_{};
+  lv_obj_t *home_title_bar_ = nullptr;
   lv_obj_t *home_title_label_ = nullptr;
   std::array<lv_obj_t *, 4> home_info_labels_ = {nullptr, nullptr, nullptr, nullptr};
   lv_obj_t *home_bar_bg_ = nullptr;
   lv_obj_t *home_bar_fill_ = nullptr;
   lv_obj_t *home_remain_label_ = nullptr;
+  lv_obj_t *diagnostics_title_bar_ = nullptr;
   lv_obj_t *diagnostics_title_label_ = nullptr;
   std::array<lv_obj_t *, 4> diagnostics_labels_ = {nullptr, nullptr, nullptr, nullptr};
+  lv_obj_t *scale_title_bar_ = nullptr;
   lv_obj_t *scale_title_label_ = nullptr;
   std::array<lv_obj_t *, 3> scale_labels_ = {nullptr, nullptr, nullptr};
+  lv_obj_t *rfid_title_bar_ = nullptr;
   lv_obj_t *rfid_title_label_ = nullptr;
   std::array<lv_obj_t *, 4> rfid_labels_ = {nullptr, nullptr, nullptr, nullptr};
+  std::array<lv_obj_t *, 3> footer_boxes_ = {nullptr, nullptr, nullptr};
+  std::array<lv_obj_t *, 3> footer_labels_ = {nullptr, nullptr, nullptr};
   static lv_color_t draw_buffer_[NativeLcd::kWidth * k_draw_buffer_lines];
 };
 

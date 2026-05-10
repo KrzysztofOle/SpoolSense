@@ -27,6 +27,8 @@ class Pn532Reader {
   }
   bool read_passive_target(uint8_t *uid, uint8_t *uid_length, uint16_t timeout_ms);
   bool read_sonicare_usage_page(uint8_t *page_data);
+  bool read_ntag_page(uint8_t page, uint8_t *page_data);
+  bool write_ntag_page(uint8_t page, const uint8_t *data);
 
  private:
   Adafruit_PN532 pn532_;

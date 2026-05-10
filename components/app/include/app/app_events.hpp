@@ -38,6 +38,7 @@ struct RfidEvent {
     kWaitingForCard,
     kCardRemoved,
     kCardPresent,
+    kWriteResult,
   };
 
   Kind kind = Kind::kReaderMissing;
@@ -50,6 +51,14 @@ struct RfidEvent {
   uint8_t usage_page[4] = {};
   uint32_t usage_seconds = 0;
   uint8_t life_percent = 0;
+  bool profile_available = false;
+  uint8_t profile_material_code = 0;
+  uint8_t profile_color_code = 0;
+  int16_t profile_reference_weight_g = 0;
+  uint8_t profile_diameter_x10 = 0;
+  uint8_t profile_nozzle_temp_c = 0;
+  uint8_t profile_bed_temp_c = 0;
+  bool write_success = false;
   uint32_t timestamp_ms = 0;
 };
 
@@ -74,6 +83,18 @@ struct Hx711Command {
   };
 
   Kind kind = Kind::kZero;
+  uint32_t timestamp_ms = 0;
+};
+
+struct RfidCommand {
+  enum class Kind : uint8_t {
+    kWriteSampleData,
+  };
+
+  Kind kind = Kind::kWriteSampleData;
+  uint8_t start_page = 0;
+  uint8_t page_count = 0;
+  uint8_t data[16] = {};
   uint32_t timestamp_ms = 0;
 };
 

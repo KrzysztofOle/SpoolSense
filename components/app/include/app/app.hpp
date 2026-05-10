@@ -37,6 +37,7 @@ class App {
 
  private:
   static constexpr UBaseType_t kRfidEventQueueLength = 8;
+  static constexpr UBaseType_t kRfidCommandQueueLength = 4;
   static constexpr UBaseType_t kWeightEventQueueLength = 8;
   static constexpr UBaseType_t kHx711CommandQueueLength = 4;
   static constexpr UBaseType_t kUiStateQueueLength = 1;
@@ -56,6 +57,7 @@ class App {
   void handle_home_input(AppState &state, const ButtonEvent &event);
   void handle_diagnostics_input(AppState &state, const ButtonEvent &event);
   void handle_scale_input(AppState &state, const ButtonEvent &event);
+  void handle_rfid_input(AppState &state, const ButtonEvent &event);
   void update_spool_metrics();
   void start_tasks();
   void stop_tasks();
@@ -67,7 +69,9 @@ class App {
   bool publish_rfid_event(const RfidEvent &event);
   bool publish_weight_event(const WeightEvent &event);
   bool publish_hx711_command(const Hx711Command &command);
+  bool publish_rfid_command(const RfidCommand &command);
   bool receive_rfid_event(RfidEvent *event);
+  bool receive_rfid_command(RfidCommand *command);
   bool receive_weight_event(WeightEvent *event);
   bool receive_hx711_command(Hx711Command *command);
   bool ui_state_changed(const UiState &lhs, const UiState &rhs) const;
@@ -80,6 +84,7 @@ class App {
   TaskHandle_t ui_task_handle_ = nullptr;
   TaskHandle_t diagnostics_task_handle_ = nullptr;
   QueueHandle_t rfid_event_queue_ = nullptr;
+  QueueHandle_t rfid_command_queue_ = nullptr;
   QueueHandle_t weight_event_queue_ = nullptr;
   QueueHandle_t hx711_command_queue_ = nullptr;
   QueueHandle_t ui_state_queue_ = nullptr;
