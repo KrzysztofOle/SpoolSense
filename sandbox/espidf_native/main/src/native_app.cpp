@@ -69,7 +69,6 @@ void NativeApp::run() {
         buttons.c != last_buttons.c) {
       if (is_pressed_edge(buttons.a, last_buttons.a)) {
         ++click_counters.a;
-        ui.next_pattern();
       }
       if (is_pressed_edge(buttons.b, last_buttons.b)) {
         ++click_counters.b;
@@ -79,7 +78,6 @@ void NativeApp::run() {
       }
       if (is_pressed_edge(buttons.c, last_buttons.c)) {
         ++click_counters.c;
-        ui.reset_pattern();
       }
       last_buttons = buttons;
       have_last_buttons = true;

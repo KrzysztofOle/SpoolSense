@@ -22,12 +22,6 @@
 #include "sandbox/native_lcd.hpp"
 
 namespace sandbox {
-enum class ColorPattern : uint8_t {
-  kRgb = 0,
-  kCmy = 1,
-  kGrayscale = 2,
-};
-
 struct ButtonCounters {
   uint32_t a = 0;
   uint32_t b = 0;
@@ -37,8 +31,6 @@ struct ButtonCounters {
 class NativeLvglUi {
  public:
   bool begin(NativeLcd *lcd);
-  void next_pattern();
-  void reset_pattern();
   bool toggle_color_order();
   bool set_color_order(ColorOrder order);
   void update(const ButtonSnapshot &buttons, const ButtonCounters &counters, uint32_t uptime_ms);
@@ -47,8 +39,6 @@ class NativeLvglUi {
 
  private:
   void rebuild_screen();
-  static const char *pattern_name(ColorPattern pattern);
-  static ColorPattern next_pattern_of(ColorPattern pattern);
   static const char *color_order_name(ColorOrder order);
   static ColorOrder next_color_order_of(ColorOrder order);
 
@@ -57,7 +47,6 @@ class NativeLvglUi {
   void *title_ = nullptr;
   void *subtitle_ = nullptr;
   void *footer_ = nullptr;
-  ColorPattern pattern_ = ColorPattern::kRgb;
-  ColorOrder color_order_ = ColorOrder::kRgb;
+  ColorOrder color_order_ = ColorOrder::kBgr;
 };
 }  // namespace sandbox

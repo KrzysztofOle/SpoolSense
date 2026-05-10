@@ -3,7 +3,7 @@
  *
  * Features (EN):
  * - Configures LVGL display buffers and flush callback for NativeLcd.
- * - Shows switchable LCD color test patterns with large swatches.
+ * - Shows an LCD color test with all RGB combinations as large swatches.
  * - Keeps frame updates lightweight while staying fully native ESP-IDF.
  *
  * Funkcje (PL):
@@ -48,78 +48,24 @@ constexpr lv_coord_t k_footer_y = -10;
 
 constexpr int k_swatch_count = 8;
 
-const char *pattern_title(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return "LCD COLOR TEST - RGB";
-    case ColorPattern::kCmy:
-      return "LCD COLOR TEST - CMY";
-    case ColorPattern::kGrayscale:
-      return "LCD COLOR TEST - GRAY";
-  }
-
-  return "LCD COLOR TEST";
+const char *screen_title() {
+  return "RGB COMBINATIONS";
 }
 
-const char *pattern_subtitle(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return "A NEXT  B ORDER  C RESET";
-    case ColorPattern::kCmy:
-      return "A NEXT  B ORDER  C RESET";
-    case ColorPattern::kGrayscale:
-      return "A NEXT  B ORDER  C RESET";
-  }
-
-  return "";
+const char *screen_subtitle() {
+  return "A/C COUNTS  B RGB/BGR";
 }
 
-std::array<ColorSwatch, k_swatch_count> make_swatches(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return {{
-          {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
-          {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
-          {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
-          {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
-          {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
-          {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
-          {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
-          {"BK", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      }};
-    case ColorPattern::kCmy:
-      return {{
-          {"C", lv_color_hex(0x00B8D4), lv_color_hex(0xFFFFFF)},
-          {"M", lv_color_hex(0xD500F9), lv_color_hex(0xFFFFFF)},
-          {"Y", lv_color_hex(0xFFD600), lv_color_hex(0x000000)},
-          {"W", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
-          {"R", lv_color_hex(0xD50000), lv_color_hex(0xFFFFFF)},
-          {"G", lv_color_hex(0x00A000), lv_color_hex(0xFFFFFF)},
-          {"B", lv_color_hex(0x0040FF), lv_color_hex(0xFFFFFF)},
-          {"BK", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      }};
-    case ColorPattern::kGrayscale:
-      return {{
-          {"0", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-          {"1", lv_color_hex(0x202020), lv_color_hex(0xFFFFFF)},
-          {"2", lv_color_hex(0x404040), lv_color_hex(0xFFFFFF)},
-          {"3", lv_color_hex(0x606060), lv_color_hex(0xFFFFFF)},
-          {"4", lv_color_hex(0x808080), lv_color_hex(0xFFFFFF)},
-          {"5", lv_color_hex(0xA0A0A0), lv_color_hex(0x000000)},
-          {"6", lv_color_hex(0xC0C0C0), lv_color_hex(0x000000)},
-          {"7", lv_color_hex(0xF5F5F5), lv_color_hex(0x000000)},
-      }};
-  }
-
+std::array<ColorSwatch, k_swatch_count> make_swatches() {
   return {{
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
-      {"?", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"000", lv_color_hex(0x000000), lv_color_hex(0xFFFFFF)},
+      {"001", lv_color_hex(0x0000FF), lv_color_hex(0xFFFFFF)},
+      {"010", lv_color_hex(0x00FF00), lv_color_hex(0x000000)},
+      {"011", lv_color_hex(0x00FFFF), lv_color_hex(0x000000)},
+      {"100", lv_color_hex(0xFF0000), lv_color_hex(0xFFFFFF)},
+      {"101", lv_color_hex(0xFF00FF), lv_color_hex(0xFFFFFF)},
+      {"110", lv_color_hex(0xFFFF00), lv_color_hex(0x000000)},
+      {"111", lv_color_hex(0xFFFFFF), lv_color_hex(0x000000)},
   }};
 }
 
@@ -207,16 +153,6 @@ bool NativeLvglUi::begin(NativeLcd *lcd) {
   return true;
 }
 
-void NativeLvglUi::next_pattern() {
-  pattern_ = next_pattern_of(pattern_);
-  rebuild_screen();
-}
-
-void NativeLvglUi::reset_pattern() {
-  pattern_ = ColorPattern::kRgb;
-  rebuild_screen();
-}
-
 bool NativeLvglUi::toggle_color_order() {
   return set_color_order(next_color_order_of(color_order_));
 }
@@ -241,8 +177,8 @@ void NativeLvglUi::update(const ButtonSnapshot &buttons, const ButtonCounters &c
   }
 
   char line_footer[128];
-  std::snprintf(line_footer, sizeof(line_footer), "%s/%s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
-                pattern_name(pattern_), color_order_name(color_order_), static_cast<int>(buttons.a),
+  std::snprintf(line_footer, sizeof(line_footer), "%s | %s | A:%d B:%d C:%d | UP %lus | CNT %lu %lu %lu",
+                screen_title(), color_order_name(color_order_), static_cast<int>(buttons.a),
                 static_cast<int>(buttons.b), static_cast<int>(buttons.c), static_cast<unsigned long>(uptime_ms / 1000U),
                 static_cast<unsigned long>(counters.a), static_cast<unsigned long>(counters.b),
                 static_cast<unsigned long>(counters.c));
@@ -264,18 +200,18 @@ void NativeLvglUi::rebuild_screen() {
   auto *title = lv_label_create(scr);
   lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_22, LV_PART_MAIN);
-  lv_label_set_text(title, pattern_title(pattern_));
+  lv_label_set_text(title, screen_title());
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, k_title_y);
   title_ = title;
 
   auto *subtitle = lv_label_create(scr);
   lv_obj_set_style_text_color(subtitle, lv_color_hex(0xA0A0A0), LV_PART_MAIN);
   lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_label_set_text(subtitle, pattern_subtitle(pattern_));
+  lv_label_set_text(subtitle, screen_subtitle());
   lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, k_subtitle_y);
   subtitle_ = subtitle;
 
-  const auto swatches = make_swatches(pattern_);
+  const auto swatches = make_swatches();
   for (int index = 0; index < k_swatch_count; ++index) {
     const int column = index % 4;
     const int row = index / 4;
@@ -292,32 +228,6 @@ void NativeLvglUi::rebuild_screen() {
   footer_ = footer;
 
   lv_refr_now(nullptr);
-}
-
-const char *NativeLvglUi::pattern_name(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return "RGB";
-    case ColorPattern::kCmy:
-      return "CMY";
-    case ColorPattern::kGrayscale:
-      return "GRAY";
-  }
-
-  return "UNKNOWN";
-}
-
-ColorPattern NativeLvglUi::next_pattern_of(ColorPattern pattern) {
-  switch (pattern) {
-    case ColorPattern::kRgb:
-      return ColorPattern::kCmy;
-    case ColorPattern::kCmy:
-      return ColorPattern::kGrayscale;
-    case ColorPattern::kGrayscale:
-      return ColorPattern::kRgb;
-  }
-
-  return ColorPattern::kRgb;
 }
 
 const char *NativeLvglUi::color_order_name(ColorOrder order) {
