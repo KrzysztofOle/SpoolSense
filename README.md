@@ -1,56 +1,31 @@
-# 🧵 SpoolSense
+# SpoolSense — smart filament scale (prototype)
 
-SpoolSense is a smart filament spool scale designed for 3D printing environments.  
-It measures filament weight in real-time, tracks usage, and optionally monitors the drying process when placed under a filament dryer.
+**Verified state of `main` as of 2026-11-21:** PlatformIO/Arduino firmware skeleton for **M5Stack Core ESP32**. The only `src/main.cpp` initializes M5Unified and prints a periodic message to serial; **weight measurement, HX711, RFID and the multi-screen UI are not implemented on `main`**.
 
-## 🚀 Features
+## Purpose
+The project explores a connected scale for monitoring the remaining mass of filament on a 3D-printer spool. Intended future capabilities include load-cell measurements, spool identification by RFID and a local screen. These are roadmap items, not tested product functions.
 
-- ⚖️ Real-time filament weight measurement
-- 📉 Filament usage tracking and estimation
-- 🔥 Drying process monitoring (temperature/time integration – optional)
-- 🏷️ RFID-based spool identification (automatic spool recognition)
-- 📊 Data logging and analysis
-- 🔌 Designed for integration with IoT / automation systems
+## Current technology
+- ESP32 / `m5stack-core-esp32`, framework **Arduino**;
+- PlatformIO `espressif32@6.7.0`;
+- M5Unified library from the M5Stack repository;
+- serial monitor at 115200 baud.
 
-## 🧠 Concept
+## Build and run (M5Stack Core)
+Install [PlatformIO](https://platformio.org/) and connect the supported board.
 
-The device is placed under a filament dryer or spool holder.  
-It continuously measures the spool weight and correlates it with:
+```sh
+pio run -e m5stack-core
+pio run -e m5stack-core -t upload
+pio device monitor -b 115200
+```
 
-- filament consumption during printing
-- drying cycles (time/temperature)
-- spool identity via RFID tags
+Firmware upload changes the device. Confirm the hardware and port first. Only the build configuration is visible in GitHub; the commands and physical runtime have **not** been executed during this documentation audit.
 
-This allows:
+## Repository structure
+- `platformio.ini` — board, framework and dependency.
+- `src/main.cpp` — initialization and serial heartbeat.
+- [`BRANCHES_AUDIT.md`](BRANCHES_AUDIT.md) — four side branches with significant, unmerged firmware development (home screen, HX711/RFID, multi-screen UI).
 
-- accurate estimation of remaining filament
-- tracking material usage over time
-- validating drying conditions for sensitive filaments (e.g. Nylon, PETG)
-
-## 🛠️ Hardware (planned)
-
-- Load cell + HX711 (or similar ADC)
-- Microcontroller (ESP32 / similar)
-- RFID reader (e.g. PN532)
-- Optional temperature sensor (dryer integration)
-
-## 💻 Software (planned)
-
-- Python-based data processing / API
-- Embedded firmware for data acquisition
-- Optional visualization (dashboard / logs)
-
-## 📦 Use cases
-
-- 3D printing farms
-- filament management systems
-- material research / testing
-- hobbyist and professional setups
-
-## ⚠️ Status
-
-Project in early development stage.
-
-## 📜 License
-
-MIT
+## Maturity
+Early prototype. Do **not** treat feature branches as production-ready or automatically merge their `build/` artifacts. Select a candidate, review differences, then run hardware tests.
